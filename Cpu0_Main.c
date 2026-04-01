@@ -10,6 +10,7 @@
 #include "Driver_Stm.h"
 #include "Buzzer.h"
 #include "DFPlayer.h"
+#include "RGB_LED.h"
 #include "UltraSonic.h"
 
 /* CUSTOM MACRO */
@@ -63,6 +64,7 @@ void core0_main(void)
     initDFPlayer();
     initUltraSonic();
     initBUZ();
+    initRGB();
 
     /********/
 
@@ -117,6 +119,8 @@ void AppTask100ms(void)
 
 void AppTask1000ms(void)
 {
+    RGB_Task();
+
     stTestCnt.u32nuCnt1000ms++;
 }
 
