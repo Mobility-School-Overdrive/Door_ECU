@@ -12,6 +12,7 @@
 
 #include "Driver_Stm.h"
 #include "Buzzer.h"
+#include "UltraSonic.h"
 
 /* CUSTOM MACRO */
 
@@ -61,6 +62,7 @@ void core0_main(void)
     Window_Motor_Home();
 
     Driver_Stm_Init();
+    initUltraSonic();
     initBUZ();
 
     /********/
@@ -109,6 +111,8 @@ void core0_main(void)
 
 void AppTask1ms(void)
 {
+    Ultrasonic_Task();
+
     stTestCnt.u32nuCnt1ms++;
 }
 
