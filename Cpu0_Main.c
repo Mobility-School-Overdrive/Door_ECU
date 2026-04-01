@@ -7,11 +7,9 @@
 #include "Ifx_Cfg_Ssw.h"
 #include "MotorDriver.h"
 
-// TODO: 센서 드라이버 합칠 때 아래 주석 해제
-// #include "SensorDriver.h"
-
 #include "Driver_Stm.h"
 #include "Buzzer.h"
+#include "DFPlayer.h"
 #include "UltraSonic.h"
 
 /* CUSTOM MACRO */
@@ -62,6 +60,7 @@ void core0_main(void)
     Window_Motor_Home();
 
     Driver_Stm_Init();
+    initDFPlayer();
     initUltraSonic();
     initBUZ();
 
@@ -69,22 +68,11 @@ void core0_main(void)
 
     Ifx_TickTime ticksFor1000ms = IfxStm_getTicksFromMilliseconds(&MODULE_STM0, 1000);
 
+    DFPlayer_Task();
+
     while (1)
     {
         AppScheduling();
-
-        // ── 센서 폴링 ──────────────────────────────────────
-        // TODO: 센서 드라이버 합칠 때 아래 블록 채워넣기
-        //
-        // float ultrasonic = Sensor_GetUltrasonic();
-        // float current    = Sensor_GetCurrent();
-        //
-        // if (ultrasonic < ULTRASONIC_THRESH || current > CURRENT_THRESH)
-        // {
-        //     Door_Motor_Stop();
-        //     Window_Motor_Stop();
-        // }
-        // ────────────────────────────────────────────────────
 
         // ── 모터 상태머신 업데이트 (논블로킹) ───────────────
         Door_Motor_Update();
