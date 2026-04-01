@@ -11,6 +11,7 @@
 // #include "SensorDriver.h"
 
 #include "Driver_Stm.h"
+#include "Buzzer.h"
 
 /* CUSTOM MACRO */
 
@@ -60,6 +61,7 @@ void core0_main(void)
     Window_Motor_Home();
 
     Driver_Stm_Init();
+    initBUZ();
 
     /********/
 
