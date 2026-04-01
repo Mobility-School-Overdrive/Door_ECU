@@ -9,6 +9,7 @@
 
 #include "Driver_Stm.h"
 #include "BT.h"
+#include "MCMCAN.h"
 #include "Buzzer.h"
 #include "DFPlayer.h"
 #include "RGB_LED.h"
@@ -98,6 +99,8 @@ void core0_main(void)
     initUltraSonic();
     initBUZ();
     initRGB();
+    initMcmcan();
+    initLeds();
     initBT();
 
     /********/
@@ -160,6 +163,7 @@ void AppTask100ms(void)
 void AppTask1000ms(void)
 {
     RGB_Task();
+    // transmitCanMessage();
 
     if (g_btLineReady)
     {
