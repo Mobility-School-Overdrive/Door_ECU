@@ -1,0 +1,32 @@
+# Build folders
+Debug/
+Release/
+build/
+TriCore Debug (TASKING)/
+TriCore Release (TASKING)/
+
+# Build files
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# VS Code
+.vscode/
+
+# Git message
+.gitmessage.txt
