@@ -8,6 +8,7 @@
 #include "MotorDriver.h"
 
 #include "Driver_Stm.h"
+#include "BT.h"
 #include "Buzzer.h"
 #include "DFPlayer.h"
 #include "RGB_LED.h"
@@ -47,6 +48,38 @@ void AppScheduling(void);
 
 IFX_ALIGN(4) IfxCpu_syncEvent cpuSyncEvent = 0;
 
+static volatile uint8 g_btLine[64];
+static volatile uint8 g_btWorkLine[64];
+static volatile boolean g_btLineReady = FALSE;
+
+void BT_LineTask(void)
+{
+    static uint8 idx = 0;
+    uint8 ch;
+
+    while (BT_GetChar(&ch))
+    {
+        if ((ch != '\r') && (ch != '\n'))
+        {
+            if (idx < sizeof(g_btWorkLine) - 1)
+            {
+                g_btWorkLine[idx++] = ch;
+            }
+        }
+
+        if ((ch == '\r') || (ch == '\n'))
+        {
+            if (idx > 0)
+            {
+                g_btWorkLine[idx] = '\0';
+                strcpy((char *)g_btLine, (char *)g_btWorkLine);
+                g_btLineReady = TRUE;
+                idx = 0;
+            }
+        }
+    }
+}
+
 void core0_main(void)
 {
     IfxCpu_enableInterrupts();
@@ -65,6 +98,7 @@ void core0_main(void)
     initUltraSonic();
     initBUZ();
     initRGB();
+    initBT();
 
     /********/
 
@@ -72,9 +106,13 @@ void core0_main(void)
 
     DFPlayer_Task();
 
+    // 블루투스 이름 설정
+    BT_SendString("AT+NAMEOVERDRIVE");
+
     while (1)
     {
         AppScheduling();
+        BT_Task();
 
         // ── 모터 상태머신 업데이트 (논블로킹) ───────────────
         Door_Motor_Update();
@@ -108,6 +146,8 @@ void AppTask1ms(void)
 
 void AppTask10ms(void)
 {
+    BT_LineTask();
+
     stTestCnt.u32nuCnt10ms++;
 }
 
@@ -120,6 +160,16 @@ void AppTask100ms(void)
 void AppTask1000ms(void)
 {
     RGB_Task();
+
+    if (g_btLineReady)
+    {
+        g_btLineReady = FALSE;
+
+        if (strstr((char *)g_btLine, "+ADDR") != NULL)
+        {
+            // IfxPort_setPinHigh(&MODULE_P00, 5);
+        }
+    }
 
     stTestCnt.u32nuCnt1000ms++;
 }
