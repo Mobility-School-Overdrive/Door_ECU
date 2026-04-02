@@ -38,14 +38,14 @@
 
 /* Global */
 #define PCn_3_IDX 27
-#define PCn_9_IDX 11
+#define PCn_6_IDX 19
 
 #define PCx_NO_PULL         0x0
 #define PCx_GENERAL_OUTPUT  0x10
 
 /* UltraSonic */
 #define ULTRASONIC_PORT 11
-#define TRIG_PIN        9
+#define TRIG_PIN        6
 #define ECHO_PIN        3
 
 #define ULTRASONIC_POUT (P11_OUT)
@@ -158,8 +158,8 @@ void initUltraSonic(void)
     P11_IOCR0.U |=  (ULTRASONIC_ECHO_PCx << PCn_3_IDX);
 
     // Trig pin output
-    P11_IOCR8.U &= ~(0x1F << PCn_9_IDX);
-    P11_IOCR8.U |=  (ULTRASONIC_TRIG_PCx << PCn_9_IDX);
+    P11_IOCR4.U &= ~(0x1F << PCn_6_IDX);
+    P11_IOCR4.U |=  (ULTRASONIC_TRIG_PCx << PCn_6_IDX);
 
     // Trig Low
     ULTRASONIC_POUT.U &= ~(1U << TRIG_PIN);
