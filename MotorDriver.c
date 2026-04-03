@@ -47,6 +47,9 @@ volatile sint32 dbg_door_abs    = 0;
 volatile sint32 dbg_win_target  = 0;
 volatile sint32 dbg_win_error   = 0;
 volatile sint32 dbg_win_abs     = 0;
+volatile uint32 dbg_duty        = 0;
+volatile uint32 dbg_reach       = 0;
+volatile uint32 dbg_brake       = 100;
 
 /*============================================================
  * 내부 함수 선언
@@ -60,6 +63,8 @@ static void Door_PWM_Update(uint32 duty);
 static void Window_PWM_Update(uint32 duty);
 static void Door_Motor_Drive(sint32 error, sint32 abs_err);
 static void Window_Motor_Drive(sint32 error, sint32 abs_err);
+void Door_Motor_SetDuty(uint32 duty);
+void Window_Motor_SetDuty(uint32 duty);
 
 /*============================================================
  * ISR - Door 엔코더 A (P13.1)
@@ -242,20 +247,17 @@ void Motor_Init(void)
  *============================================================*/
 static void Door_PWM_Update(uint32 duty)
 {
-    Ifx_GTM_TOM *tom = PWM_Door_Driver.tom;
-    uint8 ch = PWM_Door_Driver.tomChannel;
-    IfxGtm_Tom_Ch_setCompareOneShadow(tom, ch, duty);
-    IfxGtm_Tom_Tgc_trigger(PWM_Door_Driver.tgc);
+    PWM_Door_Config.dutyCycle = duty;
+    IfxGtm_Tom_Pwm_init(&PWM_Door_Driver, &PWM_Door_Config);
+    IfxGtm_Tom_Pwm_start(&PWM_Door_Driver, TRUE);
 }
 
 static void Window_PWM_Update(uint32 duty)
 {
-    Ifx_GTM_TOM *tom = PWM_Window_Driver.tom;
-    uint8 ch = PWM_Window_Driver.tomChannel;
-    IfxGtm_Tom_Ch_setCompareOneShadow(tom, ch, duty);
-    IfxGtm_Tom_Tgc_trigger(PWM_Window_Driver.tgc);
+    PWM_Window_Config.dutyCycle = duty;
+    IfxGtm_Tom_Pwm_init(&PWM_Window_Driver, &PWM_Window_Config);
+    IfxGtm_Tom_Pwm_start(&PWM_Window_Driver, TRUE);
 }
-
 /*============================================================
  * Motor_Delay_ms (public)
  *============================================================*/
@@ -276,10 +278,10 @@ static void Door_Motor_Drive(sint32 error, sint32 abs_err)
 {
     sint32 dir = (error > 0) ? 1 : -1;
 
-    // 방향 전환 시에만 10ms 안정화
     if (door_last_dir != 0 && door_last_dir != dir)
     {
-        Door_Motor_Stop();
+        Door_PWM_Update(0);
+        IfxPort_setPinHigh(IfxPort_P02_7.port, IfxPort_P02_7.pinIndex);
         Motor_Delay_ms(10);
     }
     door_last_dir = dir;
@@ -289,9 +291,9 @@ static void Door_Motor_Drive(sint32 error, sint32 abs_err)
     else if (abs_err >= 4) duty = (uint32)(0.30f * DOOR_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * DOOR_PWM_PERIOD);
 
-    IfxPort_setPinLow(IfxPort_P02_7.port, IfxPort_P02_7.pinIndex);   // BRAKE OFF
-    if (dir > 0) IfxPort_setPinHigh(IfxPort_P10_1.port, IfxPort_P10_1.pinIndex); // CW
-    else         IfxPort_setPinLow(IfxPort_P10_1.port,  IfxPort_P10_1.pinIndex); // CCW
+    IfxPort_setPinLow(IfxPort_P02_7.port, IfxPort_P02_7.pinIndex);
+    if (dir > 0) IfxPort_setPinHigh(IfxPort_P10_1.port, IfxPort_P10_1.pinIndex);
+    else         IfxPort_setPinLow(IfxPort_P10_1.port,  IfxPort_P10_1.pinIndex);
     Door_PWM_Update(duty);
 }
 
@@ -301,8 +303,10 @@ static void Window_Motor_Drive(sint32 error, sint32 abs_err)
 
     if (window_last_dir != 0 && window_last_dir != dir)
     {
-        Window_Motor_Stop();
+        Window_PWM_Update(0);
+        IfxPort_setPinHigh(IfxPort_P02_6.port, IfxPort_P02_6.pinIndex); // BRAKE ON
         Motor_Delay_ms(10);
+        // Window_Motor_Stop() 대신 직접 처리 → state 안 바꿈
     }
     window_last_dir = dir;
 
@@ -345,7 +349,7 @@ void Door_Motor_Update(void)
     dbg_door_error  = error;
     dbg_door_abs    = abs_err;
 
-    if (abs_err <= DOOR_ARRIVE_THRESH)
+    if (abs_err <= DOOR_ARRIVE_THRESH)  // DOOR_ARRIVE_THRESH = 1
     {
         Door_Motor_Stop();
         door_state = MOTOR_DONE;
@@ -433,4 +437,14 @@ void Window_Motor_Home(void)
 MotorState_t Window_Motor_GetState(void)
 {
     return window_state;
+}
+
+void Door_Motor_SetDuty(uint32 duty)
+{
+    Door_PWM_Update(duty);
+}
+
+void Window_Motor_SetDuty(uint32 duty)
+{
+    Window_PWM_Update(duty);
 }
