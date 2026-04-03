@@ -9,6 +9,7 @@
 
 #include "Driver_Stm.h"
 #include "BT.h"
+#include "FSR.h"
 #include "MCMCAN.h"
 #include "Buzzer.h"
 #include "DFPlayer.h"
@@ -99,6 +100,7 @@ void core0_main(void)
     initUltraSonic();
     initBUZ();
     initRGB();
+    initFSR();
     initMcmcan();
     initLeds();
     initBT();
@@ -150,6 +152,7 @@ void AppTask1ms(void)
 void AppTask10ms(void)
 {
     BT_LineTask();
+    FSR_Task();
 
     stTestCnt.u32nuCnt10ms++;
 }
