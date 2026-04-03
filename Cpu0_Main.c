@@ -90,10 +90,6 @@ void core0_main(void)
     IfxCpu_waitEvent(&cpuSyncEvent, 1);
 
     /* Init */
-    Motor_Init();
-    Door_Motor_Home();
-    Window_Motor_Home();
-
     Driver_Stm_Init();
     initDFPlayer();
     initUltraSonic();
@@ -102,6 +98,10 @@ void core0_main(void)
     initMcmcan();
     initLeds();
     initBT();
+
+    Motor_Init();
+    Door_Motor_Home();
+    Window_Motor_Home();
 
     /********/
 
@@ -112,26 +112,51 @@ void core0_main(void)
     // 블루투스 이름 설정
     BT_SendString("AT+NAMEOVERDRIVE");
 
+    float door_target_angle   = 90.0f;
+    float window_target_angle = 90.0f;
+
+    Door_Motor_SetTarget(door_target_angle);
+    Window_Motor_SetTarget(window_target_angle);
+
     while (1)
     {
         AppScheduling();
         BT_Task();
 
-        // ── 모터 상태머신 업데이트 (논블로킹) ───────────────
+//        // ── 모터 상태머신 업데이트 (논블로킹) ───────────────
+//        Door_Motor_Update();
+//        Window_Motor_Update();
+//
+//        // ── 상태 전환 예시 ───────────────────────────────────
+//        // DONE 상태가 되면 다음 목표로 전환
+//        if (Door_Motor_GetState()   == MOTOR_DONE &&
+//            Window_Motor_GetState() == MOTOR_DONE)
+//        {
+//            Motor_Delay_ms(2000);
+//            Door_Motor_SetTarget(0.0f);
+//            Window_Motor_SetTarget(0.0f);
+//        }
+//
+//        Motor_Delay_ms(5);  // 루프 주기 5ms
+
         Door_Motor_Update();
         Window_Motor_Update();
 
-        // ── 상태 전환 예시 ───────────────────────────────────
-        // DONE 상태가 되면 다음 목표로 전환
-        if (Door_Motor_GetState()   == MOTOR_DONE &&
-            Window_Motor_GetState() == MOTOR_DONE)
+        if (Door_Motor_GetState() == MOTOR_DONE)
         {
-            Motor_Delay_ms(2000);
-            Door_Motor_SetTarget(0.0f);
-            Window_Motor_SetTarget(0.0f);
+            Motor_Delay_ms(1000);
+            door_target_angle = (door_target_angle == 0.0f) ? 90.0f : 0.0f;
+            Door_Motor_SetTarget(door_target_angle);
         }
 
-        Motor_Delay_ms(5);  // 루프 주기 5ms
+        if (Window_Motor_GetState() == MOTOR_DONE)
+        {
+            Motor_Delay_ms(1000);
+            window_target_angle = (window_target_angle == 0.0f) ? 90.0f : 0.0f;
+            Window_Motor_SetTarget(window_target_angle);
+        }
+
+        Motor_Delay_ms(10);
     }
 }
 
