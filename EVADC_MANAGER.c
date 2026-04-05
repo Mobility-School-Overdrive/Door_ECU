@@ -1,5 +1,5 @@
 /**********************************************************************************************************************
- * \file FSR.c
+ * \file EVADC_MANAGER.c
  * \copyright Copyright (C) Infineon Technologies AG 2019
  *
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of
@@ -28,110 +28,59 @@
 /*********************************************************************************************************************/
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
-#include "FSR.h"
 #include "IfxEvadc_Adc.h"
 #include "EVADC_Manager.h"
-
-/*********************************************************************************************************************/
-/*------------------------------------------------------Macros-------------------------------------------------------*/
-/*********************************************************************************************************************/
-
-/* AN0 = Group0 Channel0 */
-#define FSR_CHANNEL_ID      IfxEvadc_ChannelId_0
-#define FSR_RESULT_REG      IfxEvadc_ChannelResult_0
-
-/* 기준 전압: 배선에 맞게 수정 */
-#define FSR_REF_VOLTAGE 5.0f    // 5V
-#define FSR_ADC_MAX 4095.0f     //
-
-#define FSR_RAW_MIN 2500.0f
-#define FSR_RAW_MAX 3200.0f
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
 /*********************************************************************************************************************/
 
 /* EVADC handle */
-static IfxEvadc_Adc_Channel g_fsrChannel;
-
-/* FSR values */
-static volatile uint16  g_fsrRaw = 0;
-static volatile float32 g_fsrVoltage = 0.0f;
-static volatile uint8   g_fsrPercent = 0;
-
-/*********************************************************************************************************************/
-/*-----------------------------------------------Function Prototypes-------------------------------------------------*/
-/*********************************************************************************************************************/
-
-static uint8 FSR_CalcPercent(uint16 raw);
+static IfxEvadc_Adc g_evadc;
+static IfxEvadc_Adc_Group g_adcGroup0;
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
 /*********************************************************************************************************************/
 
-/* Task */
-void FSR_Task(void)
+void EVADC_Manager_initModule(void)
 {
-    Ifx_EVADC_G_RES result;
+    IfxEvadc_Adc_Config adcConfig;
 
-    /* 결과 읽기 */
-    result = IfxEvadc_Adc_getResult(&g_fsrChannel);
-
-    if (result.B.VF == 1)
-    {
-        g_fsrRaw = (uint16)result.B.RESULT;
-        g_fsrVoltage = ((float32)g_fsrRaw * FSR_REF_VOLTAGE) / FSR_ADC_MAX;
-        g_fsrPercent = FSR_CalcPercent(g_fsrRaw);
-    }
+    IfxEvadc_Adc_initModuleConfig(&adcConfig, &MODULE_EVADC);
+    IfxEvadc_Adc_initModule(&g_evadc, &adcConfig);
 }
 
-/************/
-
-/* FSR Init */
-
-void initFSR(void)
+IfxEvadc_Adc* EVADC_Manager_getHandle(void)
 {
-    IfxEvadc_Adc_Group *group;
-    IfxEvadc_Adc_ChannelConfig adcChannelConfig;
-
-    group = EVADC_Group0_getHandle();
-
-    IfxEvadc_Adc_initChannelConfig(&adcChannelConfig, group);
-    adcChannelConfig.channelId = FSR_CHANNEL_ID;
-    adcChannelConfig.resultRegister = FSR_RESULT_REG;
-
-    IfxEvadc_Adc_initChannel(&g_fsrChannel, &adcChannelConfig);
-
-    IfxEvadc_Adc_addToQueue(&g_fsrChannel, IfxEvadc_RequestSource_queue0, IFXEVADC_QUEUE_REFILL);
+    return &g_evadc;
 }
 
-/***************/
-
-/* FSR Library */
-static uint8 FSR_CalcPercent(uint16 raw)
+IfxEvadc_Adc_Group* EVADC_Group0_getHandle(void)
 {
-    float32 percent;
-
-    percent = ((FSR_RAW_MAX - (float32)raw) /
-              (FSR_RAW_MAX - FSR_RAW_MIN)) * 100.0f;
-
-    if (percent < 0.0f) percent = 0.0f;
-    if (percent > 100.0f) percent = 100.0f;
-
-    return (uint8)(percent + 0.5f);
+    return &g_adcGroup0;
 }
 
-uint16 FSR_GetRaw(void)
+void EVADC_Group0_init(void)
 {
-    return g_fsrRaw;
+    IfxEvadc_Adc *evadc;
+    IfxEvadc_Adc_GroupConfig adcGroupConfig;
+
+    evadc = EVADC_Manager_getHandle();
+
+    IfxEvadc_Adc_initGroupConfig(&adcGroupConfig, evadc);
+
+    adcGroupConfig.groupId = IfxEvadc_GroupId_0;
+    adcGroupConfig.master = IfxEvadc_GroupId_0;
+    adcGroupConfig.startupCalibration = TRUE;
+
+    adcGroupConfig.arbiter.requestSlotQueue0Enabled = TRUE;
+    adcGroupConfig.queueRequest[0].triggerConfig.gatingMode = IfxEvadc_GatingMode_always;
+
+    IfxEvadc_Adc_initGroup(&g_adcGroup0, &adcGroupConfig);
 }
 
-float32 FSR_GetVoltage(void)
+void EVADC_Group0_start(void)
 {
-    return g_fsrVoltage;
-}
-
-uint8 FSR_GetPercent(void)
-{
-    return g_fsrPercent;
+    IfxEvadc_Adc_startQueue(&g_adcGroup0, IfxEvadc_RequestSource_queue0);
 }

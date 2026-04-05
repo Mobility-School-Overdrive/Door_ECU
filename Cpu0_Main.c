@@ -15,9 +15,13 @@
 #include "DFPlayer.h"
 #include "RGB_LED.h"
 #include "UltraSonic.h"
+#include "Current_Sensor.h"
 
 /* CUSTOM MACRO */
 
+/* MOTER ID */
+#define DOOR_MOTOR_ID   1
+#define WINDOW_MOTOR_ID 2
 
 /***********************/
 
@@ -92,24 +96,27 @@ void core0_main(void)
 
     /* Init */
     Driver_Stm_Init();
-    initDFPlayer();
-    initUltraSonic();
-    initBUZ();
-    initRGB();
-    initFSR();
-    initMcmcan();
-    initLeds();
-    initBT();
+    EVADC_Manager_initModule();
+    EVADC_Group0_init();
 
     Motor_Init();
     Door_Motor_Home();
     Window_Motor_Home();
 
+    initDFPlayer();
+    initUltraSonic();
+    initBUZ();
+    initRGB();
+    initFSR();
+    initCurrentSensor();
+    initMcmcan();
+    initBT();
+
+    EVADC_Group0_start();
+
     /********/
 
     Ifx_TickTime ticksFor1000ms = IfxStm_getTicksFromMilliseconds(&MODULE_STM0, 1000);
-
-    DFPlayer_Task();
 
     // 블루투스 이름 설정
     BT_SendString("AT+NAMEOVERDRIVE");
@@ -120,8 +127,24 @@ void core0_main(void)
     Door_Motor_SetTarget(door_target_angle);
     Window_Motor_SetTarget(window_target_angle);
 
+    dfSetVolume(0x02);
+
+    delayMs(1000);
+
+    DFPlayer_Task();
+
+    delayMs(1000);
+
+    CurrentSensor_ClearFault(DOOR_MOTOR_ID);
+    CurrentSensor_StartSense(DOOR_MOTOR_ID);
+
+    CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
+    CurrentSensor_StartSense(WINDOW_MOTOR_ID);
+
     while (1)
     {
+        CurrentSensor_Task(DOOR_MOTOR_ID);
+        CurrentSensor_Task(WINDOW_MOTOR_ID);
         AppScheduling();
         BT_Task();
 
@@ -146,16 +169,26 @@ void core0_main(void)
 
         if (Door_Motor_GetState() == MOTOR_DONE)
         {
+            CurrentSensor_StopSense(DOOR_MOTOR_ID);
+
             Motor_Delay_ms(1000);
             door_target_angle = (door_target_angle == 0.0f) ? 90.0f : 0.0f;
+
+            CurrentSensor_ClearFault(DOOR_MOTOR_ID);
             Door_Motor_SetTarget(door_target_angle);
+            CurrentSensor_StartSense(DOOR_MOTOR_ID);
         }
 
         if (Window_Motor_GetState() == MOTOR_DONE)
         {
+            CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+
             Motor_Delay_ms(1000);
             window_target_angle = (window_target_angle == 0.0f) ? 90.0f : 0.0f;
+
+            CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
             Window_Motor_SetTarget(window_target_angle);
+            CurrentSensor_StartSense(WINDOW_MOTOR_ID);
         }
 
         Motor_Delay_ms(10);
@@ -179,6 +212,18 @@ void AppTask10ms(void)
     BT_LineTask();
     FSR_Task();
 
+    if (CurrentSensor_GetFault(DOOR_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+    {
+        Door_Motor_Stop();
+        CurrentSensor_StopSense(DOOR_MOTOR_ID);
+    }
+
+    if (CurrentSensor_GetFault(WINDOW_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+    {
+        Window_Motor_Stop();
+        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+    }
+
     stTestCnt.u32nuCnt10ms++;
 }
 
@@ -191,7 +236,6 @@ void AppTask100ms(void)
 void AppTask1000ms(void)
 {
     RGB_Task();
-    // transmitCanMessage();
 
     if (g_btLineReady)
     {
