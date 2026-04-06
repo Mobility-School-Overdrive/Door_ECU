@@ -34,7 +34,7 @@
 
 /* 버튼 GPIO 핀 — 실제 배선에 맞게 수정 */
 #define BTN_WIN_UP_PORT     &MODULE_P15
-#define BTN_WIN_UP_PIN      15
+#define BTN_WIN_UP_PIN      5
 #define BTN_WIN_DOWN_PORT   &MODULE_P15
 #define BTN_WIN_DOWN_PIN    4
 #define BTN_DOOR_PORT       &MODULE_P20
