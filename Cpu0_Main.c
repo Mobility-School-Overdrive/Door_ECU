@@ -104,6 +104,7 @@ void core0_main(void)
     EVADC_Group0_init();
 
     Motor_Init();
+    Button_Init();
     Door_Motor_Home();
     Window_Motor_Home();
 
@@ -125,11 +126,8 @@ void core0_main(void)
     // 블루투스 이름 설정
     BT_SendString("AT+NAMEOVERDRIVE");
 
-    float door_target_angle   = 90.0f;
-    float window_target_angle = 90.0f;
-
-    Door_Motor_SetTarget(door_target_angle);
-    Window_Motor_SetTarget(window_target_angle);
+    float door_target_angle   = 0.0f;
+    float window_target_angle = 0.0f;
 
     dfSetVolume(0x02);
 
@@ -167,35 +165,35 @@ void core0_main(void)
 //        }
 //
 //        Motor_Delay_ms(5);  // 루프 주기 5ms
-
-        Door_Motor_Update();
-        Window_Motor_Update();
-
-        if (Door_Motor_GetState() == MOTOR_DONE)
-        {
-            CurrentSensor_StopSense(DOOR_MOTOR_ID);
-
-            Motor_Delay_ms(1000);
-            door_target_angle = (door_target_angle == 0.0f) ? 90.0f : 0.0f;
-
-            CurrentSensor_ClearFault(DOOR_MOTOR_ID);
-            Door_Motor_SetTarget(door_target_angle);
-            CurrentSensor_StartSense(DOOR_MOTOR_ID);
-        }
-
-        if (Window_Motor_GetState() == MOTOR_DONE)
-        {
-            CurrentSensor_StopSense(WINDOW_MOTOR_ID);
-
-            Motor_Delay_ms(1000);
-            window_target_angle = (window_target_angle == 0.0f) ? 90.0f : 0.0f;
-
-            CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
-            Window_Motor_SetTarget(window_target_angle);
-            CurrentSensor_StartSense(WINDOW_MOTOR_ID);
-        }
-
-        Motor_Delay_ms(10);
+//
+//        Door_Motor_Update();
+//        Window_Motor_Update();
+//
+//        if (Door_Motor_GetState() == MOTOR_DONE)
+//        {
+//            CurrentSensor_StopSense(DOOR_MOTOR_ID);
+//
+//            Motor_Delay_ms(1000);
+//            door_target_angle = (door_target_angle == 0.0f) ? 90.0f : 0.0f;
+//
+//            CurrentSensor_ClearFault(DOOR_MOTOR_ID);
+//            Door_Motor_SetTarget(door_target_angle);
+//            CurrentSensor_StartSense(DOOR_MOTOR_ID);
+//        }
+//
+//        if (Window_Motor_GetState() == MOTOR_DONE)
+//        {
+//            CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+//
+//            Motor_Delay_ms(1000);
+//            window_target_angle = (window_target_angle == 0.0f) ? 90.0f : 0.0f;
+//
+//            CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
+//            Window_Motor_SetTarget(window_target_angle);
+//            CurrentSensor_StartSense(WINDOW_MOTOR_ID);
+//        }
+//
+//        Motor_Delay_ms(10);
     }
 }
 
@@ -216,17 +214,17 @@ void AppTask10ms(void)
     BT_LineTask();
     FSR_Task();
 
-    if (CurrentSensor_GetFault(DOOR_MOTOR_ID) == CURRENT_FAULT_MOTOR)
-    {
-        Door_Motor_Stop();
-        CurrentSensor_StopSense(DOOR_MOTOR_ID);
-    }
-
-    if (CurrentSensor_GetFault(WINDOW_MOTOR_ID) == CURRENT_FAULT_MOTOR)
-    {
-        Window_Motor_Stop();
-        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
-    }
+//    if (CurrentSensor_GetFault(DOOR_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+//    {
+//        Door_Motor_Stop();
+//        CurrentSensor_StopSense(DOOR_MOTOR_ID);
+//    }
+//
+//    if (CurrentSensor_GetFault(WINDOW_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+//    {
+//        Window_Motor_Stop();
+//        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+//    }
     Button_Update();
     Door_Motor_Update();
     Window_Motor_Update();
