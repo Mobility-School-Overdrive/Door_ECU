@@ -17,6 +17,8 @@
 #include "UltraSonic.h"
 #include "Current_Sensor.h"
 
+//#include "PinTest.c"
+
 /* CUSTOM MACRO */
 
 /* MOTER ID */
@@ -85,6 +87,8 @@ void BT_LineTask(void)
         }
     }
 }
+
+boolean raw = 1;
 
 void core0_main(void)
 {
@@ -223,6 +227,9 @@ void AppTask10ms(void)
         Window_Motor_Stop();
         CurrentSensor_StopSense(WINDOW_MOTOR_ID);
     }
+    Button_Update();
+    Door_Motor_Update();
+    Window_Motor_Update();
 
     stTestCnt.u32nuCnt10ms++;
 }

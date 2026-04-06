@@ -291,6 +291,9 @@ static void Door_Motor_Drive(sint32 error, sint32 abs_err)
     else if (abs_err >= 4) duty = (uint32)(0.30f * DOOR_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * DOOR_PWM_PERIOD);
 
+    dbg_duty  = duty;   // ← 추가
+    dbg_brake = 0;      // ← BRAKE OFF 직전 확인용
+
     IfxPort_setPinLow(IfxPort_P02_7.port, IfxPort_P02_7.pinIndex);
     if (dir > 0) IfxPort_setPinHigh(IfxPort_P10_1.port, IfxPort_P10_1.pinIndex);
     else         IfxPort_setPinLow(IfxPort_P10_1.port,  IfxPort_P10_1.pinIndex);
@@ -349,7 +352,7 @@ void Door_Motor_Update(void)
     dbg_door_error  = error;
     dbg_door_abs    = abs_err;
 
-    if (abs_err <= DOOR_ARRIVE_THRESH)  // DOOR_ARRIVE_THRESH = 1
+    if (abs_err <= DOOR_ARRIVE_THRESH)
     {
         Door_Motor_Stop();
         door_state = MOTOR_DONE;
