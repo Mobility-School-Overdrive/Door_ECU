@@ -23,20 +23,27 @@
 #define WINDOW_PWM_PERIOD   50000
 #define DOOR_PWM_PIN        IfxGtm_TOM0_1_TOUT1_P02_1_OUT
 #define WINDOW_PWM_PIN      IfxGtm_TOM0_3_TOUT105_P10_3_OUT
-#define MIN_PWM             30.0f
+#define MIN_PWM             40.0f
 
 /*============================================================
  * Encoder
  *============================================================*/
+#define GEAR_RATIO          8
 #define CPR                 30
 #define ENCODER_MODE        1
-#define COUNTS_PER_REV      (CPR * ENCODER_MODE)
-#define COUNTS_PER_DEG      (COUNTS_PER_REV / 360.0f)
+#define COUNTS_PER_REV      (CPR * ENCODER_MODE * GEAR_RATIO)  /* 30*1*8 = 240 */
+#define COUNTS_PER_DEG      (COUNTS_PER_REV / 360.0f)          /* = 0.6667 */
 
 #define DOOR_ENC_A_PIN      IfxGtm_TIM2_6_P13_1_IN
 #define DOOR_ENC_B_PIN      IfxGtm_TIM2_7_P13_2_IN
 #define WINDOW_ENC_A_PIN    IfxGtm_TIM0_4_P02_4_IN
 #define WINDOW_ENC_B_PIN    IfxGtm_TIM0_5_P02_5_IN
+
+/*============================================================
+ * Angle Limit
+ *============================================================*/
+#define DOOR_MAX_ANGLE      80.0f
+#define WINDOW_MAX_ANGLE    90.0f  /* 실제 창문 물리적 최대치에 맞게 조정 */
 
 /*============================================================
  * Interrupt Priority
