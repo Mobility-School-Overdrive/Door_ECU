@@ -287,7 +287,7 @@ static void Apply_WindowState(OpenClose_t state)
 {
     if (state == OPEN_CLOSE_OPEN)
     {
-        Window_Motor_SetTarget(90.0f);
+        Window_Motor_SetTarget(WINDOW_MAX_ANGLE);
     }
     else
     {

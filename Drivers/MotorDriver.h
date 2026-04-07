@@ -24,7 +24,7 @@
 #define WINDOW_PWM_PERIOD   50000
 #define DOOR_PWM_PIN        IfxGtm_TOM0_1_TOUT1_P02_1_OUT
 #define WINDOW_PWM_PIN      IfxGtm_TOM0_3_TOUT105_P10_3_OUT
-#define MIN_PWM             5.0f
+#define MIN_PWM             30.0f
 
 /*============================================================
  * Encoder
