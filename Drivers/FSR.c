@@ -46,14 +46,14 @@
 #define FSR_REF_VOLTAGE 5.0f    // 5V
 #define FSR_ADC_MAX 4095.0f     //
 
-#define FSR_RAW_MIN 2500.0f
-#define FSR_RAW_MAX 3200.0f
+#define FSR_RAW_MIN 1500.0f
+#define FSR_RAW_MAX 2200.0f
 
 #define HANDLE_PRESS_DELTA_TH      8U
 #define HANDLE_PRESS_RESEND_TICKS  10U   /* 10ms task 기준 = 100ms */
 
-#define HANDLE_PRESS_ACTIVE_VOLTAGE_TH   3.0f
-#define HANDLE_PRESS_RELEASE_VOLTAGE_TH  1.5f
+#define HANDLE_PRESS_ACTIVE_VOLTAGE_TH   2.0f
+#define HANDLE_PRESS_RELEASE_VOLTAGE_TH  1.0f
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
