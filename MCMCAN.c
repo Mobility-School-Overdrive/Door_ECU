@@ -480,6 +480,7 @@ void handler_SafeExitAssist(void)
     g_ctrlState.safe_exit_active = TRUE;
     g_ctrlState.speaker = ON_OFF_ON;
     g_ctrlState.door_state = OPEN_CLOSE_CLOSE;
+    g_rxDoorOpenCmd = OPEN_CLOSE_CLOSE;
 
     g_reqObstacleWarn = TRUE;
     g_reqBuzzer = TRUE;

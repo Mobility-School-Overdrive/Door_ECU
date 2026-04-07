@@ -69,8 +69,8 @@ typedef enum
 } UltrasonicState;
 
 volatile UltrasonicState g_ultraState = US_IDLE;
-volatile uint16 g_distanceCm = 0;
-volatile boolean g_ultraReady = FALSE;
+extern volatile uint16 g_distanceCm = 0;
+extern volatile boolean g_ultraReady = FALSE;
 volatile boolean g_ultraTrigBusy = FALSE;
 
 /*********************************************************************************************************************/
@@ -124,6 +124,7 @@ void Ultrasonic_Task(void)
             break;
 
         case US_DONE:
+            g_ultraReady = FALSE;
             g_ultraState = US_IDLE;
             break;
 
