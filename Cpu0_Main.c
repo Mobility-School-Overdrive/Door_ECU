@@ -25,8 +25,6 @@
 /* CUSTOM MACRO */
 
 /* MOTER ID */
-#define DOOR_MOTOR_ID   1
-#define WINDOW_MOTOR_ID 2
 
 /***********************/
 
@@ -270,10 +268,16 @@ static void Apply_DoorState(OpenClose_t state)
 {
     if (state == OPEN_CLOSE_OPEN)
     {
-        /* 사용자 설정 각도로 문 열기 */
-        Door_Motor_SetTarget((float32)g_user_settings.door_angle);
+        /* 열기 전 초음파 체크 */
+        if (g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
+        {
+            g_ctrlState.door_state = OPEN_CLOSE_CLOSE;  // 상태 되돌리기
+            g_rxDoorOpenCmd        = OPEN_CLOSE_CLOSE;
+            g_reqBuzzer = TRUE;
+            return;  // SetTarget 호출 안 함
+        }
 
-        /* 문이 열릴 때 사용자 설정 LED 색상 적용 */
+        Door_Motor_SetTarget((float32)g_user_settings.door_angle);
         RGB_SetColor(g_user_settings.led_color);
     }
     else
@@ -316,6 +320,15 @@ void AppTask1ms(void)
 
 void AppTask10ms(void)
 {
+    /* 초음파 감지 시 즉시 정지 — Door_Motor_Update() 호출 전에 위치 */
+    if (g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
+    {
+        g_ctrlState.door_state = OPEN_CLOSE_CLOSE;
+        g_rxDoorOpenCmd        = OPEN_CLOSE_CLOSE;
+        Door_Motor_Stop();
+        g_reqBuzzer = TRUE;
+    }
+
     BT_ProcessTask();
 
     CanEvent_ServiceTask();

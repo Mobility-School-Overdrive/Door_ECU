@@ -11,6 +11,7 @@
 #include "DoorApp.h"
 #include "MCMCAN.h"
 #include "ButtonHandler.h"
+#include "UltraSonic.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -18,6 +19,7 @@
 /* 실제 하드웨어 연결 핀 */
 #define DOOR_LOCK_PORT      &MODULE_P21
 #define DOOR_LOCK_PIN       5
+
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
@@ -123,9 +125,16 @@ void DoorButton_Task(void)
     }
 }
 
+#define OBSTACLE_THRESHOLD_CM  30U
+
 void DoorControl_Task(void)
 {
-    if (g_rxDoorOpenCmd == OPEN_CLOSE_OPEN)
+    if (Door_Motor_GetState() == MOTOR_DONE)
+    {
+        return;
+    }
+
+    if (g_ctrlState.door_state == OPEN_CLOSE_OPEN)
     {
         Door_Motor_SetTarget((float32)g_currentDoorAngle);
     }
