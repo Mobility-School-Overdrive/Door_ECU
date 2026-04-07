@@ -31,6 +31,8 @@
 #include "FSR.h"
 #include "IfxEvadc_Adc.h"
 #include "EVADC_Manager.h"
+#include "DoorApp.h"
+#include "MCMCAN.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -46,6 +48,12 @@
 
 #define FSR_RAW_MIN 2500.0f
 #define FSR_RAW_MAX 3200.0f
+
+#define HANDLE_PRESS_DELTA_TH      8U
+#define HANDLE_PRESS_RESEND_TICKS  10U   /* 10ms task 기준 = 100ms */
+
+#define HANDLE_PRESS_ACTIVE_VOLTAGE_TH   3.0f
+#define HANDLE_PRESS_RELEASE_VOLTAGE_TH  1.5f
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
@@ -64,22 +72,64 @@ static volatile uint8   g_fsrPercent = 0;
 /*********************************************************************************************************************/
 
 static uint8 FSR_CalcPercent(uint16 raw);
+uint8 FSR_GetPercent(void);
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
 /*********************************************************************************************************************/
 
 /* Task */
+void HandlePressure_Task(void)
+{
+    static boolean prevPressed = FALSE;
+    boolean nowPressed = FALSE;
+    float32 fsrVoltage = 0.0f;
+
+    fsrVoltage = FSR_GetVoltage();
+
+    if (fsrVoltage >= HANDLE_PRESS_ACTIVE_VOLTAGE_TH)
+    {
+        nowPressed = TRUE;
+    }
+    else if (fsrVoltage <= HANDLE_PRESS_RELEASE_VOLTAGE_TH)
+    {
+        nowPressed = FALSE;
+    }
+    else
+    {
+        nowPressed = prevPressed;
+    }
+
+    if ((prevPressed == FALSE) && (nowPressed == TRUE))
+    {
+        can_send_HandlePressure();
+    }
+
+    prevPressed = nowPressed;
+}
 void FSR_Task(void)
 {
+    static uint16 filtRaw = 0;
+    static boolean fsrInit = FALSE;
     Ifx_EVADC_G_RES result;
 
-    /* 결과 읽기 */
     result = IfxEvadc_Adc_getResult(&g_fsrChannel);
 
     if (result.B.VF == 1)
     {
-        g_fsrRaw = (uint16)result.B.RESULT;
+        uint16 raw = (uint16)result.B.RESULT;
+
+        if (fsrInit == FALSE)
+        {
+            filtRaw = raw;
+            fsrInit = TRUE;
+        }
+        else
+        {
+            filtRaw = (uint16)(((uint32)filtRaw * 3U + raw) / 4U);
+        }
+
+        g_fsrRaw = filtRaw;
         g_fsrVoltage = ((float32)g_fsrRaw * FSR_REF_VOLTAGE) / FSR_ADC_MAX;
         g_fsrPercent = FSR_CalcPercent(g_fsrRaw);
     }
@@ -131,7 +181,7 @@ float32 FSR_GetVoltage(void)
     return g_fsrVoltage;
 }
 
-uint8 FSR_GetPercent(void)
+    uint8 FSR_GetPercent(void)
 {
     return g_fsrPercent;
 }

@@ -7,8 +7,8 @@
 #include "Ifx_Cfg_Ssw.h"
 #include "MotorDriver.h"
 
+#include "can_type_def.h"
 #include "Driver_Stm.h"
-#include "BT.h"
 #include "FSR.h"
 #include "MCMCAN.h"
 #include "Buzzer.h"
@@ -16,6 +16,9 @@
 #include "RGB_LED.h"
 #include "UltraSonic.h"
 #include "Current_Sensor.h"
+#include "ButtonHandler.h"
+#include "DoorApp.h"
+#include <string.h>
 
 //#include "PinTest.c"
 
@@ -50,45 +53,20 @@ void AppTask100ms(void);
 void AppTask1000ms(void);
 void AppScheduling(void);
 
+static void CanEvent_ServiceTask(void);
+static void ControlState_ApplyTask(void);
+
+/* helper */
+static void Apply_LockState(LockCmd_t state);
+static void Apply_DoorState(OpenClose_t state);
+static void Apply_WindowState(OpenClose_t state);
+static void Apply_SpeakerState(OnOff_t state);
+
 /****************************/
 
 /* Function Implementations */
 
 IFX_ALIGN(4) IfxCpu_syncEvent cpuSyncEvent = 0;
-
-static volatile uint8 g_btLine[64];
-static volatile uint8 g_btWorkLine[64];
-static volatile boolean g_btLineReady = FALSE;
-
-void BT_LineTask(void)
-{
-    static uint8 idx = 0;
-    uint8 ch;
-
-    while (BT_GetChar(&ch))
-    {
-        if ((ch != '\r') && (ch != '\n'))
-        {
-            if (idx < sizeof(g_btWorkLine) - 1)
-            {
-                g_btWorkLine[idx++] = ch;
-            }
-        }
-
-        if ((ch == '\r') || (ch == '\n'))
-        {
-            if (idx > 0)
-            {
-                g_btWorkLine[idx] = '\0';
-                strcpy((char *)g_btLine, (char *)g_btWorkLine);
-                g_btLineReady = TRUE;
-                idx = 0;
-            }
-        }
-    }
-}
-
-boolean raw = 1;
 
 void core0_main(void)
 {
@@ -105,6 +83,7 @@ void core0_main(void)
 
     Motor_Init();
     Button_Init();
+    DoorLock_Init();
     Door_Motor_Home();
     Window_Motor_Home();
 
@@ -126,17 +105,14 @@ void core0_main(void)
     // 블루투스 이름 설정
     BT_SendString("AT+NAMEOVERDRIVE");
 
-    float door_target_angle   = 0.0f;
-    float window_target_angle = 0.0f;
-
+    // 스피커 볼륨 설정
     dfSetVolume(0x02);
-
     delayMs(1000);
 
-    DFPlayer_Task();
-
+    playDFPlayerMusicLoop(g_rxCurrentUserId);
     delayMs(1000);
 
+    // 문, 창문 전류 센서 초기화
     CurrentSensor_ClearFault(DOOR_MOTOR_ID);
     CurrentSensor_StartSense(DOOR_MOTOR_ID);
 
@@ -147,56 +123,185 @@ void core0_main(void)
     {
         CurrentSensor_Task(DOOR_MOTOR_ID);
         CurrentSensor_Task(WINDOW_MOTOR_ID);
+        AudioControl_Task();
         AppScheduling();
         BT_Task();
-
-//        // ── 모터 상태머신 업데이트 (논블로킹) ───────────────
-//        Door_Motor_Update();
-//        Window_Motor_Update();
-//
-//        // ── 상태 전환 예시 ───────────────────────────────────
-//        // DONE 상태가 되면 다음 목표로 전환
-//        if (Door_Motor_GetState()   == MOTOR_DONE &&
-//            Window_Motor_GetState() == MOTOR_DONE)
-//        {
-//            Motor_Delay_ms(2000);
-//            Door_Motor_SetTarget(0.0f);
-//            Window_Motor_SetTarget(0.0f);
-//        }
-//
-//        Motor_Delay_ms(5);  // 루프 주기 5ms
-//
-//        Door_Motor_Update();
-//        Window_Motor_Update();
-//
-//        if (Door_Motor_GetState() == MOTOR_DONE)
-//        {
-//            CurrentSensor_StopSense(DOOR_MOTOR_ID);
-//
-//            Motor_Delay_ms(1000);
-//            door_target_angle = (door_target_angle == 0.0f) ? 90.0f : 0.0f;
-//
-//            CurrentSensor_ClearFault(DOOR_MOTOR_ID);
-//            Door_Motor_SetTarget(door_target_angle);
-//            CurrentSensor_StartSense(DOOR_MOTOR_ID);
-//        }
-//
-//        if (Window_Motor_GetState() == MOTOR_DONE)
-//        {
-//            CurrentSensor_StopSense(WINDOW_MOTOR_ID);
-//
-//            Motor_Delay_ms(1000);
-//            window_target_angle = (window_target_angle == 0.0f) ? 90.0f : 0.0f;
-//
-//            CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
-//            Window_Motor_SetTarget(window_target_angle);
-//            CurrentSensor_StartSense(WINDOW_MOTOR_ID);
-//        }
-//
-//        Motor_Delay_ms(10);
     }
 }
 
+/*************/
+
+/* Functions */
+
+static void CanEvent_ServiceTask(void)
+{
+    /* 1) 도난 감지 */
+    if (g_reqTheftWarn == TRUE)
+    {
+        Buzzer_Request(BUZ_EVENT_THEFT);
+        g_reqTheftWarn = FALSE;
+    }
+
+    /* 2) 공통 버저 요청 */
+    if (g_reqBuzzer == TRUE)
+    {
+        if (g_rxSafeExitAssist == TRUE)
+        {
+            Buzzer_Request(BUZ_EVENT_SAFE_EXIT);
+            g_rxSafeExitAssist = FALSE;
+        }
+        else if (g_rxTheftDetected == TRUE)
+        {
+            Buzzer_Request(BUZ_EVENT_THEFT);
+        }
+        else if (g_canObstacleDetected == TRUE)
+        {
+            Buzzer_Request(BUZ_EVENT_OBSTACLE);
+            g_canObstacleDetected = FALSE;
+        }
+        else
+        {
+            Buzzer_Request(BUZ_EVENT_OBSTACLE);
+        }
+
+        g_reqBuzzer = FALSE;
+    }
+
+    /* 4) 스피커 / DFPlayer */
+    if (g_reqSpeakerPlay == TRUE)
+    {
+        g_ctrlState.speaker = ON_OFF_ON;
+        g_reqSpeakerPlay = FALSE;
+    }
+
+    /* 5) 시동 ON */
+    if (g_reqIgnitionOnAction == TRUE)
+    {
+        /* AudioControl_Task()가 별도로 재생 처리하므로
+           여기서는 필요 시 추가 상태 초기화만 */
+        g_reqIgnitionOnAction = FALSE;
+    }
+
+    /* 6) 시동 OFF */
+    if (g_reqIgnitionOffAction == TRUE)
+    {
+        /* 필요하면 OFF 시 오디오 정리/LED 정리 */
+        g_reqIgnitionOffAction = FALSE;
+    }
+}
+
+static void ControlState_ApplyTask(void)
+{
+    static OpenClose_t prevDoorState = OPEN_CLOSE_CLOSE;
+    static OpenClose_t prevWindowState = OPEN_CLOSE_CLOSE;
+    static LockCmd_t   prevLockState = LOCK_CMD_LOCK;
+    static OnOff_t     prevSpeakerState = ON_OFF_OFF;
+    static Ignition_t  prevIgnitionState = IGNITION_OFF;
+    static boolean     prevTheftActive = FALSE;
+    static boolean     prevSafeExitActive = FALSE;
+    static UserId_t    prevCurrentUser = USER_ID_1;
+
+    /* 1) 현재 사용자 변경 */
+    if (g_ctrlState.current_user != prevCurrentUser)
+    {
+        prevCurrentUser = g_ctrlState.current_user;
+    }
+
+    /* 2) 잠금 상태 적용 */
+    if (g_ctrlState.lock_state != prevLockState)
+    {
+        Apply_LockState(g_ctrlState.lock_state);
+        prevLockState = g_ctrlState.lock_state;
+    }
+
+    /* 3) 문 상태 적용 */
+    if (g_ctrlState.door_state != prevDoorState)
+    {
+        Apply_DoorState(g_ctrlState.door_state);
+        prevDoorState = g_ctrlState.door_state;
+    }
+
+    /* 4) 창문 상태 적용 */
+    if (g_ctrlState.window_state != prevWindowState)
+    {
+        Apply_WindowState(g_ctrlState.window_state);
+        prevWindowState = g_ctrlState.window_state;
+    }
+
+    /* 5) 스피커 상태 적용 */
+    if (g_ctrlState.speaker != prevSpeakerState)
+    {
+        Apply_SpeakerState(g_ctrlState.speaker);
+
+        /* 1회성 재생이면 다시 OFF로 내림 */
+        if (g_ctrlState.speaker == ON_OFF_ON)
+        {
+            g_ctrlState.speaker = ON_OFF_OFF;
+        }
+
+        prevSpeakerState = g_ctrlState.speaker;
+    }
+
+    /* 6) 시동 상태 변화 */
+    if (g_ctrlState.ignition_state != prevIgnitionState)
+    {
+        prevIgnitionState = g_ctrlState.ignition_state;
+    }
+
+    /* 7) 도난 상태 변화 */
+    if (g_ctrlState.theft_active != prevTheftActive)
+    {
+        prevTheftActive = g_ctrlState.theft_active;
+    }
+
+    /* 8) safe exit 상태 변화 */
+    if (g_ctrlState.safe_exit_active != prevSafeExitActive)
+    {
+        prevSafeExitActive = g_ctrlState.safe_exit_active;
+    }
+}
+
+static void Apply_LockState(LockCmd_t state)
+{
+    DoorLock_SetState(state);
+}
+
+static void Apply_DoorState(OpenClose_t state)
+{
+    if (state == OPEN_CLOSE_OPEN)
+    {
+        /* 사용자 설정 각도로 문 열기 */
+        Door_Motor_SetTarget((float32)g_user_settings.door_angle);
+
+        /* 문이 열릴 때 사용자 설정 LED 색상 적용 */
+        RGB_SetColor(g_user_settings.led_color);
+    }
+    else
+    {
+        Door_Motor_SetTarget(0.0f);
+        RGB_Reset();
+    }
+}
+
+static void Apply_WindowState(OpenClose_t state)
+{
+    if (state == OPEN_CLOSE_OPEN)
+    {
+        Window_Motor_SetTarget(90.0f);
+    }
+    else
+    {
+        Window_Motor_SetTarget(0.0f);
+    }
+}
+
+static void Apply_SpeakerState(OnOff_t state)
+{
+    if (state == ON_OFF_ON)
+    {
+        playDFPlayerMusic(1, 1);
+    }
+}
 
 /******************/
 
@@ -211,23 +316,53 @@ void AppTask1ms(void)
 
 void AppTask10ms(void)
 {
-    BT_LineTask();
-    FSR_Task();
+    BT_ProcessTask();
 
-//    if (CurrentSensor_GetFault(DOOR_MOTOR_ID) == CURRENT_FAULT_MOTOR)
-//    {
-//        Door_Motor_Stop();
-//        CurrentSensor_StopSense(DOOR_MOTOR_ID);
-//    }
-//
-//    if (CurrentSensor_GetFault(WINDOW_MOTOR_ID) == CURRENT_FAULT_MOTOR)
-//    {
-//        Window_Motor_Stop();
-//        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
-//    }
+    CanEvent_ServiceTask();
+    ControlState_ApplyTask();
+    BUZ_Task();
+    // Speaker_Task();
+
+    // can_send_UserSettingValue(70U);
+
+    FSR_Task();
+    HandlePressure_Task();
+
+    DoorButton_Task();
+    WindowButton_Task();
+    PinchMonitor_Task();
+
+    // 끼임 감지 시 모터 중단
+    if (CurrentSensor_GetFault(DOOR_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+    {
+        Door_Motor_Stop();
+        CurrentSensor_StopSense(DOOR_MOTOR_ID);
+    }
+
+    if (CurrentSensor_GetFault(WINDOW_MOTOR_ID) == CURRENT_FAULT_MOTOR)
+    {
+        Window_Motor_Stop();
+        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+    }
+
     Button_Update();
     Door_Motor_Update();
     Window_Motor_Update();
+
+    // 문이 닫혔을 시 끼임 감지 초기화
+    if (Door_Motor_GetState() == MOTOR_DONE)
+    {
+        CurrentSensor_StopSense(DOOR_MOTOR_ID);
+        CurrentSensor_ClearFault(DOOR_MOTOR_ID);
+        CurrentSensor_StartSense(DOOR_MOTOR_ID);
+    }
+
+    if (Window_Motor_GetState() == MOTOR_DONE)
+    {
+        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+        CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
+        CurrentSensor_StartSense(WINDOW_MOTOR_ID);
+    }
 
     stTestCnt.u32nuCnt10ms++;
 }
@@ -235,23 +370,16 @@ void AppTask10ms(void)
 
 void AppTask100ms(void)
 {
+    UserSetting_Task();
+
+    /* 0x115 Door Status 주기 송신 */
+    can_send_DoorStatus();
+
     stTestCnt.u32nuCnt100ms++;
 }
 
 void AppTask1000ms(void)
 {
-    RGB_Task();
-
-    if (g_btLineReady)
-    {
-        g_btLineReady = FALSE;
-
-        if (strstr((char *)g_btLine, "+ADDR") != NULL)
-        {
-            // IfxPort_setPinHigh(&MODULE_P00, 5);
-        }
-    }
-
     stTestCnt.u32nuCnt1000ms++;
 }
 

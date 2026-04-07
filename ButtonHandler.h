@@ -31,8 +31,9 @@
 #include "Ifx_Types.h"
 #include "IfxPort.h"
 #include "MotorDriver.h"
+#include "DFPlayer.h"
 
-/* 버튼 GPIO 핀 — 실제 배선에 맞게 수정 */
+/* 모터 버튼 GPIO 핀 */
 #define BTN_WIN_UP_PORT     &MODULE_P15
 #define BTN_WIN_UP_PIN      5
 #define BTN_WIN_DOWN_PORT   &MODULE_P15
@@ -40,8 +41,33 @@
 #define BTN_DOOR_PORT       &MODULE_P20
 #define BTN_DOOR_PIN        14
 
+/* 문 잠금 버튼 GPIO 핀 */
+#define BTN_DOOR_LOCK_PORT  &MODULE_P21
+#define BTN_DOOR_LOCK_PIN   5
+#define LED_DOOR_LOCK_PORT  &MODULE_P21
+#define LED_DOOR_LOCK_PIN   3
+
+/* 스피커 버튼 GPIO 핀 */
+#define BTN_SPEAKER_ONOFF_PORT      &MODULE_P20
+#define BTN_SPEAKER_ONOFF_PIN       1
+
 /* 디바운스 시간 (ms) */
 #define BTN_DEBOUNCE_MS     50u
+
+typedef struct {
+    boolean last_raw;
+    boolean debounced;
+    uint32  timer_ms;
+    boolean edge_detected;   /* 눌림 엣지 1회 펄스 */
+} InBtnState_t;
+
+//typedef enum {
+//    SPEAKER_CMD_OFF,
+//    SPEAKER_CMD_ON
+//} SpeakerCmd_t;
+//
+//extern volatile LockCmd_t g_doorLockState;
+//extern volatile SpeakerCmd_t g_speakerState;
 
 void Button_Init(void);
 

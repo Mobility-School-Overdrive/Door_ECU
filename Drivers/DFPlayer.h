@@ -32,7 +32,8 @@
 /*********************************************************************************************************************/
 void initDFPlayer(void);                    /* Initialization function                                          */
 void playDFPlayerMusic(uint8 folderNumber, uint8 fileNumber);
+void playDFPlayerMusicLoop(uint8 folderNumber);
 
-void DFPlayer_Task(void);
+void AudioControl_Task(void);
 
 #endif /* DFPLAYER_H_ */

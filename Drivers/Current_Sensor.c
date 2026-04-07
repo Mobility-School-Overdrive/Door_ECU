@@ -32,8 +32,11 @@
 #include "IfxCpu_Irq.h"
 #include "IfxEvadc_Adc.h"
 #include "EVADC_Manager.h"
+#include "MCMCAN.h"
 #include "IfxSrc.h"
+#include "DoorApp.h"
 #include <math.h>
+#include "Buzzer.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -61,14 +64,14 @@
 #define DOOR_FILTER_ALPHA           0.2f
 #define DOOR_START_BLANK_COUNT      8         /* 10ms task 기준 약 80ms */
 #define DOOR_BASELINE_SAMPLES       20
-#define DOOR_JAM_RAW_DIFF_TH        180.0f    // 끼임 후보
+#define DOOR_JAM_RAW_DIFF_TH        18000.0f    // 끼임 후보
 #define DOOR_JAM_COUNT_TH           3
 
 /* WINDOW 감시 파라미터 (RAW 기준) */
 #define WINDOW_FILTER_ALPHA         0.2f
 #define WINDOW_START_BLANK_COUNT    8         /* 10ms task 기준 약 80ms */
 #define WINDOW_BASELINE_SAMPLES     20
-#define WINDOW_JAM_RAW_DIFF_TH      220.0f    // 끼임 후보
+#define WINDOW_JAM_RAW_DIFF_TH      220000.0f    // 끼임 후보
 #define WINDOW_JAM_COUNT_TH         3
 
 /* 인터럽트 */
@@ -137,11 +140,100 @@ static CurrentSensorState g_windowSensor =
 static float32 Current_CalcAmp(float32 voltage, float32 zeroVolt);
 static CurrentSensorState* getCurrentSensor(uint8 motorId);
 
+void CurrentSensor_StartSense(uint8 motorId);
+void CurrentSensor_StopSense(uint8 motorId);
+
+void CurrentSensor_ClearFault(uint8 motorId);
+CurrentFaultType CurrentSensor_GetFault(uint8 motorId);
+uint16 CurrentSensor_GetRaw(uint8 motorId);
+float32 CurrentSensor_GetAmp(uint8 motorId);
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
 /*********************************************************************************************************************/
 
 /* Task */
+void PinchMonitor_Task(void)
+{
+    CurrentFaultType doorFault;
+    CurrentFaultType windowFault;
+    float32 currentAngle;
+    float32 recoveryTarget;
+
+    doorFault = CurrentSensor_GetFault(DOOR_MOTOR_ID);
+    windowFault = CurrentSensor_GetFault(WINDOW_MOTOR_ID);
+
+    /* -------------------------------------------------
+     * Door pinch
+     * ------------------------------------------------- */
+    if (doorFault == CURRENT_FAULT_MOTOR)
+    {
+        /* 즉시 정지 */
+        Door_Motor_Stop();
+
+        /* 전류 감시 중지 */
+        CurrentSensor_StopSense(DOOR_MOTOR_ID);
+
+        /* CAN 알림 */
+        can_send_PinchDetection(PINCH_TYPE_DOOR);
+
+        /* 버저 경고 */
+        Buzzer_Request(BUZ_EVENT_PINCH);
+
+        /* 현재 각도 기준 반대 방향 10도 복귀 */
+        currentAngle = Door_Motor_GetCurrentAngle();
+
+        if (g_rxDoorOpenCmd == OPEN_CLOSE_CLOSE)
+        {
+            /* 닫히는 중 끼임 -> 다시 열기 */
+            recoveryTarget = currentAngle + DOOR_PINCH_RECOVERY_ANGLE_DEG;
+        }
+        else
+        {
+            /* 열리는 중 끼임 -> 다시 닫기 */
+            recoveryTarget = currentAngle - DOOR_PINCH_RECOVERY_ANGLE_DEG;
+        }
+
+        recoveryTarget = clampFloat32(recoveryTarget,
+                                      DOOR_MIN_ANGLE_DEG,
+                                      DOOR_MAX_ANGLE_DEG);
+
+        CurrentSensor_ClearFault(DOOR_MOTOR_ID);
+        Door_Motor_SetTarget(recoveryTarget);
+    }
+
+    /* -------------------------------------------------
+     * Window pinch
+     * ------------------------------------------------- */
+    if (windowFault == CURRENT_FAULT_MOTOR)
+    {
+        Window_Motor_Stop();
+        CurrentSensor_StopSense(WINDOW_MOTOR_ID);
+
+        can_send_PinchDetection(PINCH_TYPE_WINDOW);
+
+        /* 버저 경고 */
+        Buzzer_Request(BUZ_EVENT_PINCH);
+
+        currentAngle = Window_Motor_GetCurrentAngle();
+
+        if (g_rxWindowCmd == OPEN_CLOSE_CLOSE)
+        {
+            recoveryTarget = currentAngle + WINDOW_PINCH_RECOVERY_ANGLE_DEG;
+        }
+        else
+        {
+            recoveryTarget = currentAngle - WINDOW_PINCH_RECOVERY_ANGLE_DEG;
+        }
+
+        recoveryTarget = clampFloat32(recoveryTarget,
+                                      WINDOW_MIN_ANGLE_DEG,
+                                      WINDOW_MAX_ANGLE_DEG);
+
+        CurrentSensor_ClearFault(WINDOW_MOTOR_ID);
+        Window_Motor_SetTarget(recoveryTarget);
+    }
+}
+
 void CurrentSensor_Task(uint8 motorId)
 {
     CurrentSensorState *sensor = getCurrentSensor(motorId);

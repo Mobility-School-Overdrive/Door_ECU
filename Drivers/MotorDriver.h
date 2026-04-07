@@ -15,6 +15,7 @@
 #include "Stm/Std/IfxStm.h"
 #include "Gtm/Std/IfxGtm_Tim.h"
 #include "Gtm/Tim/In/IfxGtm_Tim_In.h"
+#include "can_type_def.h"
 
 /*============================================================
  * PWM
@@ -23,16 +24,21 @@
 #define WINDOW_PWM_PERIOD   50000
 #define DOOR_PWM_PIN        IfxGtm_TOM0_1_TOUT1_P02_1_OUT
 #define WINDOW_PWM_PIN      IfxGtm_TOM0_3_TOUT105_P10_3_OUT
-#define MIN_PWM             20.0f
+#define MIN_PWM             5.0f
 
 /*============================================================
  * Encoder
  *============================================================*/
-#define GEAR_RATIO          8
-#define CPR                 30
-#define ENCODER_MODE        1
-#define COUNTS_PER_REV      (CPR * ENCODER_MODE * GEAR_RATIO)  /* 30*1*8 = 240 */
-#define COUNTS_PER_DEG      (COUNTS_PER_REV / 360.0f)          /* = 0.6667 */
+#define DOOR_GEAR_RATIO             8
+#define DOOR_CPR                    30
+#define DOOR_ENCODER_MODE           1
+#define DOOR_COUNTS_PER_REV         DOOR_CPR * DOOR_ENCODER_MODE * DOOR_GEAR_RATIO  /* 30*1*8 = 240 */
+#define DOOR_COUNTS_PER_DEG         (DOOR_COUNTS_PER_REV / 360.0f)          /* = 0.6667 */
+
+#define WINDOW_CPR                  24
+#define WINDOW_ENCODER_MODE         1
+#define WINDOW_COUNTS_PER_REV       WINDOW_CPR * WINDOW_ENCODER_MODE  /* 24*1*8 = 192 */
+#define WINDOW_COUNTS_PER_DEG       (WINDOW_COUNTS_PER_REV / 360.0f)  /* = 0.5333 */
 
 #define DOOR_ENC_A_PIN      IfxGtm_TIM2_6_P13_1_IN
 #define DOOR_ENC_B_PIN      IfxGtm_TIM2_7_P13_2_IN
@@ -43,7 +49,9 @@
  * Angle Limit
  *============================================================*/
 #define DOOR_MAX_ANGLE      80.0f
-#define WINDOW_MAX_ANGLE    90.0f  /* 실제 창문 물리적 최대치에 맞게 조정 */
+#define WINDOW_MAX_ANGLE    1080.0f  /* 실제 창문 물리적 최대치에 맞게 조정 */
+#define DOOR_MAX_COUNT      DOOR_COUNTS_PER_REV * DOOR_MAX_ANGLE / 360.0f
+#define WINDOW_MAX_COUNT    WINDOW_COUNTS_PER_REV * WINDOW_MAX_ANGLE / 360.0f
 
 /*============================================================
  * Interrupt Priority
@@ -99,6 +107,8 @@ void         Door_Motor_Stop(void);                    // 즉시 정지 (센서 
 void         Door_Motor_Home(void);                    // 블로킹 홈 복귀 (초기화 시 1회만)
 MotorState_t Door_Motor_GetState(void);                // 현재 상태 반환
 
+float32 Door_Motor_GetCurrentAngle(void);
+
 /*============================================================
  * Window Motor API
  *============================================================*/
@@ -107,6 +117,8 @@ void         Window_Motor_Update(void);
 void         Window_Motor_Stop(void);
 void         Window_Motor_Home(void);
 MotorState_t Window_Motor_GetState(void);
+
+float32 Window_Motor_GetCurrentAngle(void);
 
 /*============================================================
  * 유틸

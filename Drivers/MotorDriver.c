@@ -5,6 +5,7 @@
  *********************************************************************************************************************/
 #include "IfxCpu.h"
 #include "MotorDriver.h"
+#include "DoorApp.h"
 
 /*============================================================
  * PWM Driver 인스턴스 (내부 전용)
@@ -287,8 +288,8 @@ static void Door_Motor_Drive(sint32 error, sint32 abs_err)
     door_last_dir = dir;
 
     uint32 duty;
-    if      (abs_err >= 8) duty = (uint32)(0.40f * DOOR_PWM_PERIOD);
-    else if (abs_err >= 4) duty = (uint32)(0.30f * DOOR_PWM_PERIOD);
+    if      (abs_err >= DOOR_MAX_COUNT * 0.5) duty = (uint32)(0.15f * DOOR_PWM_PERIOD);
+    else if (abs_err >= DOOR_MAX_COUNT * 0.25) duty = (uint32)(0.10f * DOOR_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * DOOR_PWM_PERIOD);
 
     dbg_duty  = duty;   // ← 추가
@@ -314,8 +315,8 @@ static void Window_Motor_Drive(sint32 error, sint32 abs_err)
     window_last_dir = dir;
 
     uint32 duty;
-    if      (abs_err >= 8) duty = (uint32)(0.40f * WINDOW_PWM_PERIOD);
-    else if (abs_err >= 4) duty = (uint32)(0.30f * WINDOW_PWM_PERIOD);
+    if      (abs_err >= WINDOW_MAX_COUNT * 0.5) duty = (uint32)(0.15f * WINDOW_PWM_PERIOD);
+    else if (abs_err >= WINDOW_MAX_COUNT * 0.25) duty = (uint32)(0.10f * WINDOW_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * WINDOW_PWM_PERIOD);
 
     IfxPort_setPinLow(IfxPort_P02_6.port, IfxPort_P02_6.pinIndex);   // BRAKE OFF
@@ -331,7 +332,7 @@ static void Window_Motor_Drive(sint32 error, sint32 abs_err)
 // 목표 각도 설정 → 즉시 리턴 (논블로킹)
 void Door_Motor_SetTarget(float target_angle)
 {
-    door_target_count = (sint32)(target_angle * COUNTS_PER_DEG + 0.5f);
+    door_target_count = (sint32)(target_angle * DOOR_COUNTS_PER_DEG + 0.5f);
     door_last_dir     = 0;
     door_state        = MOTOR_RUNNING;
 }
@@ -391,7 +392,7 @@ MotorState_t Door_Motor_GetState(void)
 
 void Window_Motor_SetTarget(float target_angle)
 {
-    window_target_count = (sint32)(target_angle * COUNTS_PER_DEG + 0.5f);
+    window_target_count = (sint32)(target_angle * WINDOW_COUNTS_PER_DEG + 0.5f);
     window_last_dir     = 0;
     window_state        = MOTOR_RUNNING;
 }
@@ -450,4 +451,16 @@ void Door_Motor_SetDuty(uint32 duty)
 void Window_Motor_SetDuty(uint32 duty)
 {
     Window_PWM_Update(duty);
+}
+
+/***************/
+
+float32 Door_Motor_GetCurrentAngle(void)
+{
+    return ((float32)door_encoder_count / DOOR_ENCODER_COUNT_PER_DEG);
+}
+
+float32 Window_Motor_GetCurrentAngle(void)
+{
+    return ((float32)window_encoder_count / WINDOW_ENCODER_COUNT_PER_DEG);
 }
