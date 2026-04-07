@@ -30,16 +30,29 @@
 #ifndef BUZZER_H_
 #define BUZZER_H_
 
+/* 부저 이벤트 종류 */
+typedef enum
+{
+    BUZ_EVENT_NONE = 0,
+    BUZ_EVENT_OBSTACLE,     /* 0x103 전/후방 장애물 감지 */
+    BUZ_EVENT_SAFE_EXIT,    /* 0x143 안전 하차 보조 */
+    BUZ_EVENT_THEFT,        /* 0x104 도난 감지 */
+    BUZ_EVENT_PINCH
+} BuzEvent_t;
+
+extern volatile BuzEvent_t g_buzReqEvent;
+
 /*********************************************************************************************************************/
 /*-----------------------------------------------Function Prototypes-------------------------------------------------*/
 /*********************************************************************************************************************/
-void initGtmTomPwm(void);
+void initBUZ(void);
+void BUZ_Task(void);
+
 void Buzzer_On(void);
 void Buzzer_Off(void);
-
-void fadeLED(void);
-void fadeLEDFromReg(uint32 adcReg);
 void makeSound(unsigned int sound);
 void stopSound(void);
+
+void Buzzer_Request(BuzEvent_t event);
 
 #endif /* GTM_TOM_PWM_H_ */

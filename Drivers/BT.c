@@ -30,7 +30,10 @@
 /*********************************************************************************************************************/
 #include "IfxAsclin_Asc.h"
 #include "IfxCpu_Irq.h"
+#include "BT.h"
 #include <string.h>
+#include "MCMCAN.h"
+#include "DoorApp.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -65,11 +68,35 @@ static uint8 g_btRxRing[128];
 static volatile uint16 g_btRxWrite = 0;
 static volatile uint16 g_btRxRead  = 0;
 
+/* line buffer */
+static volatile uint8 g_btLine[64];
+static volatile uint8 g_btWorkLine[64];
+static volatile boolean g_btLineReady = FALSE;
+
+/* BT state */
+static volatile UserId_t g_btSelectedUser = USER_ID_1;
+static volatile boolean g_btNearby = FALSE;
+
+/* debug */
+volatile uint32 g_btRxByteCount = 0;
+volatile uint8  g_btLastRxByte = 0;
+volatile uint32 g_btRxOverflowCount = 0;
+
+volatile uint32 g_dbgBtCmdCnt = 0U;
+volatile uint32 g_dbgBtCmdErrCnt = 0U;
+volatile BtnType_t g_dbgBtLastBtnType = (BtnType_t)0xFFU;
+volatile UserId_t g_dbgBtLastUser = USER_ID_1;
+volatile BtCommandType_t g_dbgBtLastCmdType = BT_CMD_NONE;
+
 /*********************************************************************************************************************/
 /*-----------------------------------------------Function Prototypes-------------------------------------------------*/
 /*********************************************************************************************************************/
 
-boolean BT_ReadByte(uint8 *ch);
+static boolean BT_ParseUserId(const char *line, UserId_t *userId, const char **cmdStr);
+static BtCommandType_t BT_ParseCommandType(const char *cmdStr);
+static void BT_HandleParsedCommand(const BtParsedCommand_t *cmd);
+static void BT_HandleButtonCommand(UserId_t userId, BtnType_t btnType);
+static void BT_HandleProximityCommand(UserId_t userId, BtCommandType_t cmdType);
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
@@ -92,10 +119,6 @@ void asclin0RxISR(void)
 
 /* BT Task */
 
-volatile uint32 g_btRxByteCount = 0;
-volatile uint8  g_btLastRxByte = 0;
-volatile uint32 g_btRxOverflowCount = 0;
-
 void BT_Task(void)
 {
     uint8 ch;
@@ -106,23 +129,260 @@ void BT_Task(void)
         g_btLastRxByte = ch;
         g_btRxByteCount++;
 
-        uint16 next = (g_btRxWrite + 1) % sizeof(g_btRxRing);
-        if (next != g_btRxRead)
         {
-            g_btRxRing[g_btRxWrite] = ch;
-            g_btRxWrite = next;
-        }
-        else
-        {
-            g_btRxOverflowCount++;
-            break;
+            uint16 next = (uint16)((g_btRxWrite + 1U) % sizeof(g_btRxRing));
+            if (next != g_btRxRead)
+            {
+                g_btRxRing[g_btRxWrite] = ch;
+                g_btRxWrite = next;
+            }
+            else
+            {
+                g_btRxOverflowCount++;
+                break;
+            }
         }
 
         count++;
-        if (count >= 64)
+        if (count >= 64U)
         {
             break;
         }
+    }
+}
+
+void BT_LineTask(void)
+{
+    static uint8 idx = 0U;
+    uint8 ch;
+
+    while (BT_GetChar(&ch))
+    {
+        if ((ch != '\r') && (ch != '\n'))
+        {
+            if (idx < (sizeof(g_btWorkLine) - 1U))
+            {
+                g_btWorkLine[idx++] = ch;
+            }
+        }
+
+        if ((ch == '\r') || (ch == '\n'))
+        {
+            if (idx > 0U)
+            {
+                g_btWorkLine[idx] = '\0';
+                strcpy((char *)g_btLine, (char *)g_btWorkLine);
+                g_btLineReady = TRUE;
+                idx = 0U;
+            }
+        }
+    }
+}
+
+/*****************/
+/* BT Parse Task */
+/*****************/
+static boolean BT_ParseUserId(const char *line, UserId_t *userId, const char **cmdStr)
+{
+    const char *colonPos;
+
+    if ((line == NULL) || (userId == NULL) || (cmdStr == NULL))
+    {
+        return FALSE;
+    }
+
+    if (line[0] != 'U')
+    {
+        return FALSE;
+    }
+
+    colonPos = strchr(line, ':');
+    if (colonPos == NULL)
+    {
+        return FALSE;
+    }
+
+    if (line[1] == '0')
+    {
+        *userId = USER_ID_1;   /* 0x00 */
+    }
+    else if (line[1] == '1')
+    {
+        *userId = USER_ID_2;   /* 0x01 */
+    }
+    else if (line[1] == '2')
+    {
+        *userId = USER_ID_3;   /* 0x02 */
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    *cmdStr = colonPos + 1;
+
+    if (**cmdStr == '\0')
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static BtCommandType_t BT_ParseCommandType(const char *cmdStr)
+{
+    if (cmdStr == NULL) return BT_CMD_NONE;
+
+    if (strcmp(cmdStr, "RSSI_NEAR") == 0)   return BT_CMD_RSSI_NEAR;
+    if (strcmp(cmdStr, "RSSI_FAR") == 0)    return BT_CMD_RSSI_FAR;
+    if (strcmp(cmdStr, "LOCK") == 0)        return BT_CMD_LOCK;
+    if (strcmp(cmdStr, "UNLOCK") == 0)      return BT_CMD_UNLOCK;
+    if (strcmp(cmdStr, "WINDOW_OPEN") == 0) return BT_CMD_WINDOW_OPEN;
+    if (strcmp(cmdStr, "WINDOW_CLOSE") == 0)return BT_CMD_WINDOW_CLOSE;
+    if (strcmp(cmdStr, "FORWARD") == 0)     return BT_CMD_FORWARD;
+    if (strcmp(cmdStr, "BACKWARD") == 0)    return BT_CMD_BACKWARD;
+
+    return BT_CMD_NONE;
+}
+
+BtParsedCommand_t BT_ParseLine(const char *line)
+{
+    BtParsedCommand_t parsed;
+    const char *cmdStr = NULL;
+
+    parsed.valid = FALSE;
+    parsed.userId = USER_ID_1;
+    parsed.cmdType = BT_CMD_NONE;
+
+    if (BT_ParseUserId(line, &parsed.userId, &cmdStr) == FALSE)
+    {
+        return parsed;
+    }
+
+    parsed.cmdType = BT_ParseCommandType(cmdStr);
+    if (parsed.cmdType == BT_CMD_NONE)
+    {
+        return parsed;
+    }
+
+    parsed.valid = TRUE;
+    return parsed;
+}
+
+static void BT_HandleButtonCommand(UserId_t userId, BtnType_t btnType)
+{
+    g_dbgBtLastUser = userId;
+    g_dbgBtLastBtnType = btnType;
+
+    /* 로컬 즉시 반영은 선택 */
+    switch (btnType)
+    {
+        case BTN_TYPE_LOCK:
+            g_ctrlState.lock_state = LOCK_CMD_LOCK;
+            break;
+
+        case BTN_TYPE_UNLOCK:
+            g_ctrlState.lock_state = LOCK_CMD_UNLOCK;
+            break;
+
+        case BTN_TYPE_WINDOW_OPEN:
+            g_ctrlState.window_state = OPEN_CLOSE_OPEN;
+            break;
+
+        case BTN_TYPE_WINDOW_CLOSE:
+            g_ctrlState.window_state = OPEN_CLOSE_CLOSE;
+            break;
+
+        case BTN_TYPE_FORWARD:
+        case BTN_TYPE_REVERSE:
+        default:
+            break;
+    }
+
+    /* 실제 0x210 송신: B0=user_id, B1=btn_type */
+    can_send_SmtkButtonBypass(userId, btnType);
+}
+
+static void BT_HandleProximityCommand(UserId_t userId, BtCommandType_t cmdType)
+{
+    g_dbgBtLastUser = userId;
+
+    switch (cmdType)
+    {
+        case BT_CMD_RSSI_NEAR:
+            g_btNearby = TRUE;
+            can_send_SmtkRssiEvent(userId, RSSI_TYPE_NEAR);
+            break;
+
+        case BT_CMD_RSSI_FAR:
+            g_btNearby = FALSE;
+            can_send_SmtkRssiEvent(userId, RSSI_TYPE_FAR);
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void BT_HandleParsedCommand(const BtParsedCommand_t *cmd)
+{
+    if ((cmd == NULL) || (cmd->valid == FALSE))
+    {
+        g_dbgBtCmdErrCnt++;
+        return;
+    }
+
+    g_dbgBtCmdCnt++;
+    g_dbgBtLastCmdType = cmd->cmdType;
+
+    switch (cmd->cmdType)
+    {
+        case BT_CMD_LOCK:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_LOCK);
+            break;
+
+        case BT_CMD_UNLOCK:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_UNLOCK);
+            break;
+
+        case BT_CMD_WINDOW_OPEN:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_WINDOW_OPEN);
+            break;
+
+        case BT_CMD_WINDOW_CLOSE:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_WINDOW_CLOSE);
+            break;
+
+        case BT_CMD_FORWARD:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_FORWARD);
+            break;
+
+        case BT_CMD_BACKWARD:
+            BT_HandleButtonCommand(cmd->userId, BTN_TYPE_REVERSE);
+            break;
+
+        case BT_CMD_RSSI_NEAR:
+        case BT_CMD_RSSI_FAR:
+            BT_HandleProximityCommand(cmd->userId, cmd->cmdType);
+            break;
+
+        default:
+            g_dbgBtCmdErrCnt++;
+            break;
+    }
+}
+
+void BT_ProcessTask(void)
+{
+    BtParsedCommand_t cmd;
+
+    BT_LineTask();
+
+    if (g_btLineReady == TRUE)
+    {
+        g_btLineReady = FALSE;
+        cmd = BT_ParseLine((const char *)g_btLine);
+        BT_HandleParsedCommand(&cmd);
     }
 }
 
@@ -189,7 +449,6 @@ boolean BT_ReadByte(uint8 *ch)
 {
     Ifx_SizeT count = 1;
     IfxAsclin_Asc_read(&g_btAsc, ch, &count, 1);
-
     return (count == 1) ? TRUE : FALSE;
 }
 
@@ -201,6 +460,16 @@ boolean BT_GetChar(uint8 *ch)
     }
 
     *ch = g_btRxRing[g_btRxRead];
-    g_btRxRead = (g_btRxRead + 1) % sizeof(g_btRxRing);
+    g_btRxRead = (uint16)((g_btRxRead + 1U) % sizeof(g_btRxRing));
     return TRUE;
+}
+
+UserId_t BT_GetSelectedUser(void)
+{
+    return g_btSelectedUser;
+}
+
+boolean BT_IsNearby(void)
+{
+    return g_btNearby;
 }

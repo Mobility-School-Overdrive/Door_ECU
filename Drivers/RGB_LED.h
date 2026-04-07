@@ -32,6 +32,7 @@
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
 
+#include "can_type_def.h"
 #include "Ifx_Types.h"
 #include "IfxPort_reg.h"
 
@@ -41,7 +42,12 @@
 
 void initRGB(void);
 
-void RGB_Task(void);
+void LedControl_Task(void);
+
+void RGB_Init(void);
+void RGB_Off(void);
+void RGB_SetColor(LedColor_t color);
+
 
 
 #endif /* RGB_LED_H_ */

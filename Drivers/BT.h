@@ -28,6 +28,30 @@
 #define BT_H_
 
 #include "Ifx_Types.h"
+#include "can_type_def.h"
+
+/*********************************************************************************************************************/
+/*------------------------------------------------Type Definitions---------------------------------------------------*/
+/*********************************************************************************************************************/
+typedef enum
+{
+    BT_CMD_NONE = 0,
+    BT_CMD_RSSI_NEAR,
+    BT_CMD_RSSI_FAR,
+    BT_CMD_LOCK,
+    BT_CMD_UNLOCK,
+    BT_CMD_WINDOW_OPEN,
+    BT_CMD_WINDOW_CLOSE,
+    BT_CMD_FORWARD,
+    BT_CMD_BACKWARD
+} BtCommandType_t;
+
+typedef struct
+{
+    boolean         valid;
+    UserId_t        userId;
+    BtCommandType_t cmdType;
+} BtParsedCommand_t;
 
 /*********************************************************************************************************************/
 /*------------------------------------------------Function Prototypes------------------------------------------------*/
@@ -38,5 +62,20 @@ void BT_SendString(const char *str);
 boolean BT_ReadByte(uint8 *ch);
 void BT_Task(void);
 boolean BT_GetChar(uint8 *ch);
+
+/* line parse/process */
+void BT_LineTask(void);
+BtParsedCommand_t BT_ParseLine(const char *line);
+void BT_ProcessTask(void);
+
+/* state */
+UserId_t BT_GetSelectedUser(void);
+boolean BT_IsNearby(void);
+
+extern volatile uint32 g_dbgBtCmdCnt;
+extern volatile uint32 g_dbgBtCmdErrCnt;
+extern volatile BtnType_t g_dbgBtLastBtnType;
+extern volatile UserId_t g_dbgBtLastUser;
+extern volatile BtCommandType_t g_dbgBtLastCmdType;
 
 #endif /* BT_H_ */

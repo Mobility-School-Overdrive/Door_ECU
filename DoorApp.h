@@ -1,5 +1,5 @@
 /**********************************************************************************************************************
- * \file RGB_LED.c
+ * \file DoorApp.h
  * \copyright Copyright (C) Infineon Technologies AG 2019
  * 
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of 
@@ -25,45 +25,72 @@
  * IN THE SOFTWARE.
  *********************************************************************************************************************/
 
+#ifndef DOORAPP_H_
+#define DOORAPP_H_
 
 /*********************************************************************************************************************/
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
 
-#include "RGB_LED.h"
-#include "MCMCAN.h"
-
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
 /*********************************************************************************************************************/
 
-/* Global */
-#define PCn_0_IDX 3
-#define PCn_4_IDX 3
-#define PCn_5_IDX 11
+/* =========================================================
+ * Door ECU App Tunable Defines
+ * 실제 HW 테스트하면서 조정할 값들
+ * ========================================================= */
 
-#define PCx_GENERAL_OUTPUT  0x10
+/* ---------- Motor ID ---------- */
+#define DOOR_MOTOR_ID                   1U
+#define WINDOW_MOTOR_ID                 2U
 
-/* RGB LED */
-#define RGB_RED_PIN     0
-#define RGB_GREEN_PIN   4
-#define RGB_BLUE_PIN    5
+/* ---------- Handle Pressure (0x220) ---------- */
+/* 손잡이 압력 이벤트 송신 시작 기준 (%)
+ * FSR 노이즈와 손잡이 감도에 따라 실측 후 조정 */
+#define HANDLE_PRESS_ACTIVE_TH          20U
 
-#define RGB_OUT_PCx (PCx_GENERAL_OUTPUT)
+/* 손잡이 압력 해제 기준 (%)
+ * ACTIVE/RELEASE 히스테리시스를 줘서 임계점 근처 떨림 방지 */
+#define HANDLE_PRESS_RELEASE_TH         20U
+
+/* ---------- Button Debounce ---------- */
+/* AppTask10ms 기준 3이면 약 30ms 디바운스 */
+#define BUTTON_DEBOUNCE_COUNT           3U
+
+/* ---------- Window Target Angle ---------- */
+/* 현재 창문 모터를 각도 기반으로 단순 제어 중이므로
+ * 추후 실제 스트로크 기준으로 바꿀 수 있음 */
+#define WINDOW_OPEN_TARGET_ANGLE_DEG    90.0f
+#define WINDOW_CLOSE_TARGET_ANGLE_DEG   0.0f
+
+/* ---------- Pinch Recovery ---------- */
+/* 끼임 감지 시 반대 방향으로 되돌릴 각도
+ * 실제 테스트 시 가장 많이 조정할 가능성이 큰 값 */
+#define DOOR_PINCH_RECOVERY_ANGLE_DEG   10.0f
+#define WINDOW_PINCH_RECOVERY_ANGLE_DEG 10.0f
+
+/* ---------- Door/Window Angle Limit ---------- */
+#define DOOR_MIN_ANGLE_DEG              0.0f
+#define DOOR_MAX_ANGLE_DEG              180.0f
+#define WINDOW_MIN_ANGLE_DEG            0.0f
+#define WINDOW_MAX_ANGLE_DEG            180.0f
+
+/* ---------- Encoder to Angle ---------- */
+/* 엔코더 카운트를 각도로 환산하는 비율
+ * 반드시 실제 기구부 기준으로 보정 필요
+ * 예시값이므로 완님 프로젝트 기준 count/deg로 수정 */
+#define DOOR_ENCODER_COUNT_PER_DEG      1.0f
+#define WINDOW_ENCODER_COUNT_PER_DEG    1.0f
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
 /*********************************************************************************************************************/
 
-typedef struct
-{
-    uint8 red;
-    uint8 green;
-    uint8 blue;
-} RGBState;
-
-RGBState rgbState;
-
+/*********************************************************************************************************************/
+/*-------------------------------------------------Data Structures---------------------------------------------------*/
+/*********************************************************************************************************************/
+ 
 /*********************************************************************************************************************/
 /*--------------------------------------------Private Variables/Constants--------------------------------------------*/
 /*********************************************************************************************************************/
@@ -72,120 +99,18 @@ RGBState rgbState;
 /*------------------------------------------------Function Prototypes------------------------------------------------*/
 /*********************************************************************************************************************/
 
-void RGB_Reset(void);
-void turnRGBOn(void);
+void DoorLock_Init(void);
 
-/*********************************************************************************************************************/
-/*---------------------------------------------Function Implementations----------------------------------------------*/
-/*********************************************************************************************************************/
+/* 추가: 스마트키 시퀀스 헬퍼 */
+void DoorSmartKeyUnlockSequence(void);
+void DoorSmartKeyLockSequence(void);
 
-/* RGB LED Task */
+float clampFloat32(float value, float minVal, float maxVal);
 
-void LedControl_Task(void)
-{
-    uint8 idx = (g_rxCurrentUserId > 0u) ? (g_rxCurrentUserId - 1u) : 0u;
-    if (idx >= USER_COUNT) idx = 0u;
+void DoorButton_Task(void);
+void WindowButton_Task(void);
+void DoorControl_Task(void);
+void UserSetting_Task(void);
 
-    if (g_rxTheftDetected == TRUE)
-    {
-        RGB_SetColor(LED_COLOR_RED);
-    }
-    else
-    {
-        RGB_SetColor(g_user_settings.led_color);
-    }
-}
 
-/****************/
-
-/* RGB LED Init */
-
-void initRGB(void)
-{
-    // set RED pin
-    P02_IOCR0.U &= ~(0x1F << PCn_0_IDX);
-    P02_IOCR0.U |=  (RGB_OUT_PCx << PCn_0_IDX);
-
-    // set GREEN pin
-    P10_IOCR4.U &= ~(0x1F << PCn_4_IDX);
-    P10_IOCR4.U |=  (RGB_OUT_PCx << PCn_4_IDX);
-
-    // set BLUE pin
-    P10_IOCR4.U &= ~(0x1F << PCn_5_IDX);
-    P10_IOCR4.U |=  (RGB_OUT_PCx << PCn_5_IDX);
-}
-
-/*******************/
-
-/* RGB LED Library */
-
-void RGB_Reset(void)
-{
-    rgbState.red = 0;
-    rgbState.green = 0;
-    rgbState.blue = 0;
-
-    P02_OUT.U &= ~(1U << RGB_RED_PIN);
-    P10_OUT.U &= ~(1U << RGB_GREEN_PIN);
-    P10_OUT.U &= ~(1U << RGB_BLUE_PIN);
-}
-
-void turnRGBOn(void)
-{
-    if (rgbState.red)
-        P02_OUT.U |=  (1U << RGB_RED_PIN);
-
-    if (rgbState.green)
-        P10_OUT.U |=  (1U << RGB_GREEN_PIN);
-
-    if (rgbState.blue)
-        P10_OUT.U |=  (1U << RGB_BLUE_PIN);
-}
-
-static void RGB_SetRed(void)
-{
-    P02_OUT.U &= ~(1U << RGB_RED_PIN);
-    P10_OUT.U &= ~(1U << RGB_GREEN_PIN);
-    P10_OUT.U &= ~(1U << RGB_BLUE_PIN);
-
-    P02_OUT.U |= (1U << RGB_RED_PIN);
-}
-
-static void RGB_SetGreen(void)
-{
-    P02_OUT.U &= ~(1U << RGB_RED_PIN);
-    P10_OUT.U &= ~(1U << RGB_GREEN_PIN);
-    P10_OUT.U &= ~(1U << RGB_BLUE_PIN);
-
-    P10_OUT.U |= (1U << RGB_GREEN_PIN);
-}
-
-static void RGB_SetBlue(void)
-{
-    P02_OUT.U &= ~(1U << RGB_RED_PIN);
-    P10_OUT.U &= ~(1U << RGB_GREEN_PIN);
-    P10_OUT.U &= ~(1U << RGB_BLUE_PIN);
-
-    P10_OUT.U |= (1U << RGB_BLUE_PIN);
-}
-
-void RGB_SetColor(LedColor_t color)
-{
-    switch (color)
-    {
-        case LED_COLOR_RED:
-            RGB_SetRed();
-            break;
-
-        case LED_COLOR_GREEN:
-            RGB_SetGreen();
-            break;
-
-        case LED_COLOR_BLUE:
-            RGB_SetBlue();
-            break;
-
-        default:
-            break;
-    }
-}
+#endif /* DOORAPP_H_ */

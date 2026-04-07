@@ -31,6 +31,7 @@
 #include <Buzzer.h>
 #include "Ifx_Types.h"
 #include "IfxGtm_Tom_Pwm.h"
+#include "MCMCAN.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -50,6 +51,8 @@
 IfxGtm_Tom_Pwm_Driver g_buzzerTomDriver;
 IfxGtm_Tom_Pwm_Config g_buzzerTomConfig;
 
+volatile BuzEvent_t g_buzReqEvent = BUZ_EVENT_NONE;
+
 /*********************************************************************************************************************/
 /*-----------------------------------------------Function Prototypes-------------------------------------------------*/
 /*********************************************************************************************************************/
@@ -59,41 +62,245 @@ void setDutyCycle(uint32 dutyCycle);                                /* Function 
 /*--------------------------------------------Function Implementations-----------------------------------------------*/
 /*********************************************************************************************************************/
 
+/* 내부 상태 */
+typedef struct
+{
+    boolean    active;
+    BuzEvent_t currentEvent;
+    uint16     stepTick;
+    uint8      step;
+} BuzPatternState_t;
+
+static BuzPatternState_t g_buzState = { FALSE, BUZ_EVENT_NONE, 0, 0 };
+
 /* BUZZER Task */
 
+/* 10ms 주기 호출 기준 */
 void BUZ_Task(void)
 {
-//    if(g_distanceCm < 20)
-//        Buzzer_On();
-//    else
-//        Buzzer_Off();
+    /* 새 이벤트 들어오면 패턴 시작 */
+    if (g_buzReqEvent != BUZ_EVENT_NONE)
+    {
+        g_buzState.active       = TRUE;
+        g_buzState.currentEvent = g_buzReqEvent;
+        g_buzState.step         = 0;
+        g_buzState.stepTick     = 0;
+        g_buzReqEvent           = BUZ_EVENT_NONE;
+        Buzzer_Off();
+    }
 
-    makeSound(0);   // 도
-    delayMs(500);
+    if (g_buzState.active == FALSE)
+    {
+        return;
+    }
 
-    makeSound(2);   // 레
-    delayMs(500);
+    g_buzState.stepTick++;
 
-    makeSound(4);   // 미
-    delayMs(500);
+    switch (g_buzState.currentEvent)
+    {
+        /* 0x103 장애물 감지: 짧게 2번 삑삑 */
+        case BUZ_EVENT_OBSTACLE:
+            switch (g_buzState.step)
+            {
+                case 0:
+                    makeSound(9); /* A4 */
+                    if (g_buzState.stepTick >= 10)   /* 100ms */
+                    {
+                        Buzzer_Off();
+                        g_buzState.step = 1;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
 
-    makeSound(5);   // 파
-    delayMs(500);
+                case 1:
+                    if (g_buzState.stepTick >= 5)    /* 50ms 쉼 */
+                    {
+                        g_buzState.step = 2;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
 
-    makeSound(7);   // 솔
-    delayMs(500);
+                case 2:
+                    makeSound(9);
+                    if (g_buzState.stepTick >= 10)   /* 100ms */
+                    {
+                        Buzzer_Off();
+                        g_buzState.active = FALSE;
+                        g_buzState.currentEvent = BUZ_EVENT_NONE;
+                    }
+                    break;
 
-    makeSound(9);   // 라
-    delayMs(500);
+                default:
+                    g_buzState.active = FALSE;
+                    Buzzer_Off();
+                    break;
+            }
+            break;
 
-    makeSound(11);  // 시
-    delayMs(500);
+        /* 0x143 안전 하차 보조: 조금 더 길고 급한 경고음 */
+        case BUZ_EVENT_SAFE_EXIT:
+            switch (g_buzState.step)
+            {
+                case 0:
+                    makeSound(11); /* B4 */
+                    if (g_buzState.stepTick >= 20)   /* 200ms */
+                    {
+                        Buzzer_Off();
+                        g_buzState.step = 1;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
 
-    makeSound(12);  // 도
-    delayMs(500);
+                case 1:
+                    if (g_buzState.stepTick >= 5)    /* 50ms */
+                    {
+                        g_buzState.step = 2;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
 
-    stopSound();
-    delayMs(1000);
+                case 2:
+                    makeSound(12); /* C5 */
+                    if (g_buzState.stepTick >= 20)   /* 200ms */
+                    {
+                        Buzzer_Off();
+                        g_buzState.active = FALSE;
+                        g_buzState.currentEvent = BUZ_EVENT_NONE;
+                    }
+                    break;
+
+                default:
+                    g_buzState.active = FALSE;
+                    Buzzer_Off();
+                    break;
+            }
+            break;
+
+        /* 0x104 도난 감지: 반복 경보 느낌 */
+        case BUZ_EVENT_THEFT:
+            switch (g_buzState.step)
+            {
+                case 0:
+                    makeSound(12); /* C5 */
+                    if (g_buzState.stepTick >= 15)   /* 150ms */
+                    {
+                        Buzzer_Off();
+                        g_buzState.step = 1;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
+
+                case 1:
+                    if (g_buzState.stepTick >= 5)    /* 50ms */
+                    {
+                        g_buzState.step = 2;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
+
+                case 2:
+                    makeSound(12);
+                    if (g_buzState.stepTick >= 15)
+                    {
+                        Buzzer_Off();
+                        g_buzState.step = 3;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
+
+                case 3:
+                    if (g_buzState.stepTick >= 5)
+                    {
+                        g_buzState.step = 4;
+                        g_buzState.stepTick = 0;
+                    }
+                    break;
+
+                case 4:
+                    makeSound(12);
+                    if (g_buzState.stepTick >= 15)
+                    {
+                        Buzzer_Off();
+                        g_buzState.active = FALSE;
+                        g_buzState.currentEvent = BUZ_EVENT_NONE;
+                    }
+                    break;
+
+                default:
+                    g_buzState.active = FALSE;
+                    Buzzer_Off();
+                    break;
+            }
+            break;
+
+            /* 끼임 감지: 짧고 빠르게 3번 */
+            case BUZ_EVENT_PINCH:
+                switch (g_buzState.step)
+                {
+                    case 0:
+                        makeSound(12); /* C5 */
+                        if (g_buzState.stepTick >= 8)   /* 80ms */
+                        {
+                            Buzzer_Off();
+                            g_buzState.step = 1;
+                            g_buzState.stepTick = 0;
+                        }
+                        break;
+
+                    case 1:
+                        if (g_buzState.stepTick >= 3)   /* 30ms 쉼 */
+                        {
+                            g_buzState.step = 2;
+                            g_buzState.stepTick = 0;
+                        }
+                        break;
+
+                    case 2:
+                        makeSound(12);
+                        if (g_buzState.stepTick >= 8)
+                        {
+                            Buzzer_Off();
+                            g_buzState.step = 3;
+                            g_buzState.stepTick = 0;
+                        }
+                        break;
+
+                    case 3:
+                        if (g_buzState.stepTick >= 3)
+                        {
+                            g_buzState.step = 4;
+                            g_buzState.stepTick = 0;
+                        }
+                        break;
+
+                    case 4:
+                        makeSound(12);
+                        if (g_buzState.stepTick >= 8)
+                        {
+                            Buzzer_Off();
+                            g_buzState.active = FALSE;
+                            g_buzState.currentEvent = BUZ_EVENT_NONE;
+                        }
+                        break;
+
+                    default:
+                        g_buzState.active = FALSE;
+                        Buzzer_Off();
+                        break;
+                }
+                break;
+
+        default:
+            g_buzState.active = FALSE;
+            g_buzState.currentEvent = BUZ_EVENT_NONE;
+            Buzzer_Off();
+            break;
+    }
+}
+
+void Buzzer_Request(BuzEvent_t event)
+{
+    g_buzReqEvent = event;
 }
 
 /* BUZZER Init */

@@ -38,6 +38,7 @@
 /*********************************************************************************************************************/
 void initFSR(void);
 void FSR_Task(void);
+void HandlePressure_Task(void);
 
 uint16 FSR_GetRaw(void);
 float32 FSR_GetVoltage(void);

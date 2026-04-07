@@ -30,6 +30,7 @@
 /*********************************************************************************************************************/
 #include "IfxAsclin_Asc.h"
 #include "IfxCpu_Irq.h"
+#include "MCMCAN.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -69,9 +70,10 @@
 #define Stack_CheckSum 7
 #define Stack_End 9
 
-#define CMD_PLAY_FOLDER 0x0F
-#define CMD_SET_VOLUME 0x06
-#define CMD_RESET      0x0C
+#define CMD_PLAY_FOLDER         0x0F
+#define CMD_SET_VOLUME          0x06
+#define CMD_RESET               0x0C
+#define CMD_PLAY_FOLDER_LOOP    0x17
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
@@ -94,6 +96,7 @@ void delayMs(uint32 ms);
 void dfReset(void);
 void dfSetVolume(uint8 vol);
 void playDFPlayerMusic(uint8 folderNumber, uint8 fileNumber);
+void playDFPlayerMusicLoop(uint8 folderNumber);
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
@@ -116,15 +119,18 @@ void asclin1RxISR(void)
 
 /* DFPlayer Task */
 
-void DFPlayer_Task(void)
+void AudioControl_Task(void)
 {
-    static uint8 played = 0;
+    static Ignition_t prevIgnition = IGNITION_OFF;
 
-    if(played == 0)
+    // 시동 킬 떄
+    if ((prevIgnition == IGNITION_OFF) &&
+        (g_rxIgnitionState.ignition_state == IGNITION_ON))
     {
-        playDFPlayerMusic(1, 1);
-        played = 1;
+        playDFPlayerMusicLoop(g_rxCurrentUserId);
     }
+
+    prevIgnition = g_rxIgnitionState.ignition_state;
 }
 
 /*****************/
@@ -229,5 +235,13 @@ void playDFPlayerMusic(uint8 folderNumber, uint8 fileNumber)
     _sending[Stack_Parameter + 1] = fileNumber;    // parameter low byte
 
     uint16ToArray(calculateCheckSum(_sending), _sending + Stack_CheckSum);
+    sendStack();
+}
+
+void playDFPlayerMusicLoop(uint8 folderNumber)
+{
+    _sending[Stack_Command]     = CMD_PLAY_FOLDER_LOOP;
+    _sending[Stack_Parameter]   = folderNumber;
+
     sendStack();
 }
