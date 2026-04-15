@@ -16,6 +16,7 @@
 #include "MCMCAN.h"
 #include "Buzzer.h"
 #include "DoorApp.h"
+#include "MotorDriver.h"
 
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
@@ -471,6 +472,11 @@ void handler_DoorOpenControl(OpenClose_t cmd)
 {
     g_rxDoorOpenCmd = cmd;
     g_ctrlState.door_state = cmd;
+    g_rxDoorOpenCmd = cmd;
+    if(cmd == OPEN_CLOSE_OPEN)
+        Door_Motor_SetTarget(DOOR_MAX_ANGLE);
+    if(cmd == OPEN_CLOSE_CLOSE)
+            Door_Motor_SetTarget(0.0f);
 }
 
 /* 0x143 — 안전 하차 보조 */
@@ -525,6 +531,10 @@ void handler_SmtkProximity_Door(const SmtkProximityEvent_t *msg)
     if (msg->ctrl_flags.bits.door)
     {
         g_ctrlState.door_state = msg->door_val;
+        if(g_ctrlState.door_state == OPEN_CLOSE_OPEN)
+                Door_Motor_SetTarget(DOOR_MAX_ANGLE);
+        if(g_ctrlState.door_state == OPEN_CLOSE_CLOSE)
+                Door_Motor_SetTarget(0.0f);
     }
 
     if (msg->ctrl_flags.bits.window)

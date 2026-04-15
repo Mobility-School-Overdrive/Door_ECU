@@ -288,8 +288,8 @@ static void Door_Motor_Drive(sint32 error, sint32 abs_err)
     door_last_dir = dir;
 
     uint32 duty;
-    if      (abs_err >= DOOR_MAX_COUNT * 0.5) duty = (uint32)(0.20f * DOOR_PWM_PERIOD);
-    else if (abs_err >= DOOR_MAX_COUNT * 0.25) duty = (uint32)(0.15f * DOOR_PWM_PERIOD);
+    if      (abs_err >= DOOR_MAX_COUNT * 0.5) duty = (uint32)(0.15f * DOOR_PWM_PERIOD);
+    else if (abs_err >= DOOR_MAX_COUNT * 0.25) duty = (uint32)(0.10f * DOOR_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * DOOR_PWM_PERIOD);
 
     dbg_duty  = duty;   // ← 추가
@@ -315,8 +315,8 @@ static void Window_Motor_Drive(sint32 error, sint32 abs_err)
     window_last_dir = dir;
 
     uint32 duty;
-    if      (abs_err >= WINDOW_MAX_COUNT * 0.5) duty = (uint32)(0.20f * WINDOW_PWM_PERIOD);
-    else if (abs_err >= WINDOW_MAX_COUNT * 0.25) duty = (uint32)(0.15f * WINDOW_PWM_PERIOD);
+    if      (abs_err >= WINDOW_MAX_COUNT * 0.5) duty = (uint32)(0.15f * WINDOW_PWM_PERIOD);
+    else if (abs_err >= WINDOW_MAX_COUNT * 0.25) duty = (uint32)(0.10f * WINDOW_PWM_PERIOD);
     else                   duty = (uint32)(MIN_PWM / 100.0f * WINDOW_PWM_PERIOD);
 
     IfxPort_setPinLow(IfxPort_P02_6.port, IfxPort_P02_6.pinIndex);   // BRAKE OFF
