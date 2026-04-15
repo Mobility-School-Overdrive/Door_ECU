@@ -268,13 +268,13 @@ static void Apply_DoorState(OpenClose_t state)
 {
     if (state == OPEN_CLOSE_OPEN)
     {
-        /* 열기 전 초음파 체크 */
-        if (g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
+        if (g_ctrlState.door_state == OPEN_CLOSE_OPEN &&
+            g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
         {
-            g_ctrlState.door_state = OPEN_CLOSE_CLOSE;  // 상태 되돌리기
+            g_ctrlState.door_state = OPEN_CLOSE_CLOSE;
             g_rxDoorOpenCmd        = OPEN_CLOSE_CLOSE;
+            Door_Motor_Stop();
             g_reqBuzzer = TRUE;
-            return;  // SetTarget 호출 안 함
         }
 
         Door_Motor_SetTarget((float32)g_user_settings.door_angle);
@@ -321,7 +321,8 @@ void AppTask1ms(void)
 void AppTask10ms(void)
 {
     /* 초음파 감지 시 즉시 정지 — Door_Motor_Update() 호출 전에 위치 */
-    if (g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
+    if (g_ctrlState.door_state == OPEN_CLOSE_OPEN &&
+        g_ultraReady == TRUE && g_distanceCm < OBSTACLE_THRESHOLD_CM)
     {
         g_ctrlState.door_state = OPEN_CLOSE_CLOSE;
         g_rxDoorOpenCmd        = OPEN_CLOSE_CLOSE;

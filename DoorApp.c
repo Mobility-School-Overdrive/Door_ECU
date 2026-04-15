@@ -20,7 +20,7 @@
 #define DOOR_LOCK_PORT      &MODULE_P21
 #define DOOR_LOCK_PIN       5
 
-
+#define OBSTACLE_THRESHOLD_CM  10U
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
 /*********************************************************************************************************************/
@@ -125,8 +125,6 @@ void DoorButton_Task(void)
     }
 }
 
-#define OBSTACLE_THRESHOLD_CM  30U
-
 void DoorControl_Task(void)
 {
     if (Door_Motor_GetState() == MOTOR_DONE)
@@ -136,7 +134,7 @@ void DoorControl_Task(void)
 
     if (g_ctrlState.door_state == OPEN_CLOSE_OPEN)
     {
-        Door_Motor_SetTarget((float32)g_currentDoorAngle);
+        Door_Motor_SetTarget((float32)DOOR_MAX_ANGLE);
     }
     else
     {
